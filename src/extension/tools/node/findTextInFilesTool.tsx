@@ -159,7 +159,7 @@ export class FindTextInFilesResult extends PromptElement<FindTextInFilesResultPr
 				return true;
 			});
 			if (uniqueRanges.length > 0) {
-				deduplicatedMatches.push({
+				textMatches.push({
 					...match,
 					ranges: uniqueRanges
 				});
