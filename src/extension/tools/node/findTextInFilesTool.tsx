@@ -141,11 +141,33 @@ const FIND_FILES_START_PRIORITY = 1000;
 
 export class FindTextInFilesResult extends PromptElement<FindTextInFilesResultProps> {
 	override async render(state: void, sizing: PromptSizing): Promise<PromptPiece> {
-		const textMatches = this.props.textResults.filter(isTextSearchMatch);
-		if (textMatches.length === 0) {
+		const textMatchesAll = this.props.textResults.filter(isTextSearchMatch);
+		if (textMatchesAll.length === 0) {
 			return <>No matches found</>;
 		}
+		// Deduplicate matches based on URI and source range
+		const textMatches: vscode.TextSearchMatch2[] = [];
+		const seenKeys = new Set<string>();
 
+		for (const match of textMatchesAll) {
+			const uniqueRanges = match.ranges.filter(rangeInfo => {
+				const key = `${match.uri.toString()}:${rangeInfo.sourceRange.toString()}`;
+				if (seenKeys.has(key)) {
+					return false;
+				}
+				seenKeys.add(key);
+				return true;
+			});
+			if (uniqueRanges.length > 0) {
+				deduplicatedMatches.push({
+					...match,
+					ranges: uniqueRanges
+				});
+			}
+		}
+		if (textMatches.length > 100) {
+			return <>To many matches, make your query more precise</>;
+		}
 		const numResults = textMatches.reduce((acc, result) => acc + result.ranges.length, 0);
 		const resultCountToDisplay = Math.min(numResults, this.props.maxResults);
 		const numResultsText = numResults === 1 ? '1 match' : `${resultCountToDisplay} matches`;
