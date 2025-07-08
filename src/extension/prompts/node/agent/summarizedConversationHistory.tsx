@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as l10n from '@vscode/l10n';
-import { BasePromptElementProps, PrioritizedList, PromptElement, PromptMetadata, PromptSizing, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
+import { BasePromptElementProps, PrioritizedList, PromptElement, PromptMetadata, PromptSizing, Raw, SystemMessage, UserMessage } from '@vscode/prompt-tsx';
 import { BudgetExceededError } from '@vscode/prompt-tsx/dist/base/materialized';
 import { ChatMessage } from '@vscode/prompt-tsx/dist/base/output/rawTypes';
 import type { ChatResponsePart, LanguageModelToolInformation, NotebookDocument, Progress } from 'vscode';
@@ -16,6 +16,7 @@ import { IPromptPathRepresentationService } from '../../../../platform/prompts/c
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
 import { IWorkspaceService } from '../../../../platform/workspace/common/workspaceService';
 import { CancellationToken } from '../../../../util/vs/base/common/cancellation';
+import { CancellationError, isCancellationError } from '../../../../util/vs/base/common/errors';
 import { Iterable } from '../../../../util/vs/base/common/iterator';
 import { generateUuid } from '../../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
@@ -31,6 +32,8 @@ import { Tag } from '../base/tag';
 import { ChatToolCalls } from '../panel/toolCalling';
 import { AgentUserMessage, getKeepGoingReminder, getUserMessagePropsFromAgentProps, getUserMessagePropsFromTurn } from './agentPrompt';
 import { SimpleSummarizedHistory } from './simpleSummarizedHistoryPrompt';
+import { StopWatch } from '../../../../util/vs/base/common/stopwatch';
+import { APIUsage } from '../../../../platform/networking/common/openai';
 
 export interface ConversationHistorySummarizationPromptProps extends SummarizedAgentHistoryProps {
 	simpleMode?: boolean;
@@ -43,7 +46,7 @@ export class ConversationHistorySummarizationPrompt extends PromptElement<Conver
 	override async render(state: void, sizing: PromptSizing) {
 		const history = this.props.simpleMode ?
 			<SimpleSummarizedHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} /> :
-			<ConversationHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} />;
+			<ConversationHistory priority={1} promptContext={this.props.promptContext} location={this.props.location} endpoint={this.props.endpoint} maxToolResultLength={this.props.maxToolResultLength} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
 		return (
 			<>
 				<SystemMessage priority={this.props.priority}>
@@ -388,7 +391,9 @@ class ConversationHistorySummarizer {
 
 		const summaryPromise = this.getSummaryWithFallback(propsInfo);
 		this.progress?.report(new ChatResponseProgressPart2(l10n.t('Summarizing conversation history...'), async () => {
-			await summaryPromise;
+			try {
+				await summaryPromise;
+			} catch { }
 			return l10n.t('Summarized conversation history');
 		}));
 
@@ -407,23 +412,32 @@ class ConversationHistorySummarizer {
 			try {
 				return await this.getSummary(SummaryMode.Full, propsInfo);
 			} catch (e) {
+				if (isCancellationError(e)) {
+					throw e;
+				}
+
 				return await this.getSummary(SummaryMode.Simple, propsInfo);
 			}
 		}
 	}
 
+	private logInfo(message: string, mode: SummaryMode): void {
+		this.logService.logger.info(`[ConversationHistorySummarizer] [${mode}] ${message}`);
+	}
+
 	private async getSummary(mode: SummaryMode, propsInfo: ISummarizedConversationHistoryInfo): Promise<FetchSuccess<string>> {
+		const stopwatch = new StopWatch(false);
 		const endpoint = this.props.endpoint;
 
 		let summarizationPrompt: ChatMessage[];
 		try {
-			const start = Date.now();
 			summarizationPrompt = (await renderPromptElement(this.instantiationService, endpoint, ConversationHistorySummarizationPrompt, { ...propsInfo.props, simpleMode: mode === SummaryMode.Simple }, undefined, this.token)).messages;
-			this.logService.logger.info(`[SummarizedConversationHistory] summarization prompt rendered in ${Date.now() - start}ms. Mode: ${mode}`);
+			this.logInfo(`summarization prompt rendered in ${stopwatch.elapsed()}ms.`, mode);
 		} catch (e) {
 			const budgetExceeded = e instanceof BudgetExceededError;
 			const outcome = budgetExceeded ? 'budget_exceeded' : 'renderError';
-			this.sendSummarizationTelemetry(outcome, '', this.props.endpoint.model, mode);
+			this.logInfo(`Error rendering summarization prompt in mode: ${mode}. ${e.stack}`, mode);
+			this.sendSummarizationTelemetry(outcome, '', this.props.endpoint.model, mode, stopwatch.elapsed(), undefined);
 			throw e;
 		}
 
@@ -446,34 +460,42 @@ class ConversationHistorySummarizer {
 					},
 				),
 			} : undefined;
-			summaryResponse = await endpoint.makeChatRequest('summarizeConversationHistory', ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt), undefined, this.token ?? CancellationToken.None, ChatLocation.Other, undefined, {
+
+			stripCacheBreakpoints(summarizationPrompt);
+			summaryResponse = await endpoint.makeChatRequest(`summarizeConversationHistory-${mode}`, ToolCallingLoop.stripInternalToolCallIds(summarizationPrompt), undefined, this.token ?? CancellationToken.None, ChatLocation.Other, undefined, {
 				temperature: 0,
 				stream: false,
 				...toolOpts
 			});
 		} catch (e) {
-			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode);
+			this.logInfo(`Error from summarization request. ${e.message}`, mode);
+			this.sendSummarizationTelemetry('requestThrow', '', this.props.endpoint.model, mode, stopwatch.elapsed(), undefined);
 			throw e;
 		}
 
-		return this.handleSummarizationResponse(summaryResponse, mode);
+		return this.handleSummarizationResponse(summaryResponse, mode, stopwatch.elapsed());
 	}
 
-	private async handleSummarizationResponse(response: ChatResponse, mode: SummaryMode): Promise<FetchSuccess<string>> {
+	private async handleSummarizationResponse(response: ChatResponse, mode: SummaryMode, elapsedTime: number): Promise<FetchSuccess<string>> {
 		if (response.type !== ChatFetchResponseType.Success) {
-			const outcome = response.type === ChatFetchResponseType.Failed ?
-				'failed' :
-				response.type;
-			this.sendSummarizationTelemetry(outcome, response.requestId, this.props.endpoint.model, mode, response.reason);
+			const outcome = response.type;
+			this.sendSummarizationTelemetry(outcome, response.requestId, this.props.endpoint.model, mode, elapsedTime, undefined, response.reason);
+			this.logInfo(`Summarization request failed. ${response.type} ${response.reason}`, mode);
+			if (response.type === ChatFetchResponseType.Canceled) {
+				throw new CancellationError();
+			}
+
 			throw new Error('Summarization request failed');
 		}
 
-		if (await this.sizing.countTokens(response.value) > this.sizing.tokenBudget) {
-			this.sendSummarizationTelemetry('too_large', response.requestId, this.props.endpoint.model, mode);
+		const summarySize = await this.sizing.countTokens(response.value);
+		if (summarySize > this.sizing.tokenBudget) {
+			this.sendSummarizationTelemetry('too_large', response.requestId, this.props.endpoint.model, mode, elapsedTime, response.usage);
+			this.logInfo(`Summary too large: ${summarySize} tokens`, mode);
 			throw new Error('Summary too large');
 		}
 
-		this.sendSummarizationTelemetry('success', response.requestId, this.props.endpoint.model, mode);
+		this.sendSummarizationTelemetry('success', response.requestId, this.props.endpoint.model, mode, elapsedTime, response.usage);
 		return response;
 	}
 
@@ -481,7 +503,7 @@ class ConversationHistorySummarizer {
 	 * Send telemetry for conversation summarization.
 	 * @param success Whether the summarization was successful
 	 */
-	private sendSummarizationTelemetry(outcome: string, requestId: string, model: string, mode: SummaryMode, detailedOutcome?: string): void {
+	private sendSummarizationTelemetry(outcome: string, requestId: string, model: string, mode: SummaryMode, elapsedTime: number, usage: APIUsage | undefined, detailedOutcome?: string): void {
 		const numRoundsInHistory = this.props.promptContext.history
 			.map(turn => turn.rounds.length)
 			.reduce((a, b) => a + b, 0);
@@ -492,16 +514,19 @@ class ConversationHistorySummarizer {
 		let numRoundsSinceLastSummarization = reversedCurrentRounds.findIndex(round => round.summary) ?? -1;
 		if (numRoundsSinceLastSummarization === -1) {
 			let count = numRoundsInCurrentTurn;
-			for (const turn of Iterable.reverse(Array.from(this.props.promptContext.history))) {
+			outer: for (const turn of Iterable.reverse(Array.from(this.props.promptContext.history))) {
 				for (const round of Iterable.reverse(Array.from(turn.rounds ?? []))) {
 					if (round.summary) {
 						numRoundsSinceLastSummarization = count;
-						break;
+						break outer;
 					}
 					count++;
 				}
 			}
 		}
+
+		const turnIndex = this.props.promptContext.history.length;
+		const curTurnRoundIndex = this.props.promptContext.toolCallRounds?.length ?? 0;
 
 		const lastUsedTool = this.props.promptContext.toolCallRounds?.at(-1)?.toolCalls?.at(-1)?.name ??
 			this.props.promptContext.history?.at(-1)?.rounds.at(-1)?.toolCalls?.at(-1)?.name ?? 'none';
@@ -519,13 +544,21 @@ class ConversationHistorySummarizer {
 				"detailedOutcome": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "A more detailed error message." },
 				"model": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The model ID used for the summarization." },
 				"requestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The request ID from the summarization call." },
+				"chatRequestId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The chat request ID that this summarization ran during." },
 				"numRounds": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of tool call rounds before this summarization was triggered." },
 				"numRoundsSinceLastSummarization": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The number of tool call rounds since the last summarization." },
+				"turnIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current turn." },
+				"curTurnRoundIndex": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The index of the current round within the current turn" },
 				"lastUsedTool": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The name of the last tool used before summarization." },
 				"isDuringToolCalling": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether this summarization was triggered during a tool calling loop." },
 				"conversationId": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "Id for the current chat conversation." },
 				"hasWorkingNotebook": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "Whether the conversation summary includes a working notebook." },
-				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The mode of the conversation summary." }
+				"mode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The mode of the conversation summary." },
+				"summarizationMode": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "comment": "The mode of the conversation summary." },
+				"duration": { "classification": "SystemMetaData", "purpose": "FeatureInsight", "isMeasurement": true, "comment": "The duration of the summarization attempt in ms." },
+				"promptTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens, server side counted", "isMeasurement": true },
+				"promptCacheTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of prompt tokens hitting cache as reported by server", "isMeasurement": true },
+				"responseTokenCount": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of generated tokens", "isMeasurement": true }
 			}
 		*/
 		this.telemetryService.sendMSFTTelemetryEvent('summarizedConversationHistory', {
@@ -533,17 +566,33 @@ class ConversationHistorySummarizer {
 			outcome,
 			detailedOutcome,
 			requestId,
+			chatRequestId: this.props.promptContext.conversation?.getLatestTurn().id,
 			model,
 			lastUsedTool,
 			conversationId,
-			mode
+			mode,
+			summarizationMode: mode, // Try to unstick GDPR
 		}, {
 			numRounds,
 			numRoundsSinceLastSummarization,
+			turnIndex,
+			curTurnRoundIndex,
 			isDuringToolCalling,
-			hasWorkingNotebook
+			hasWorkingNotebook,
+			duration: elapsedTime,
+			promptTokenCount: usage?.prompt_tokens,
+			promptCacheTokenCount: usage?.prompt_tokens_details.cached_tokens,
+			responseTokenCount: usage?.completion_tokens,
 		});
 	}
+}
+
+function stripCacheBreakpoints(messages: ChatMessage[]): void {
+	messages.forEach(message => {
+		message.content = message.content.filter(part => {
+			return part.type !== Raw.ChatCompletionContentPartKind.CacheBreakpoint;
+		});
+	});
 }
 
 export interface ISummarizedConversationHistoryInfo {
