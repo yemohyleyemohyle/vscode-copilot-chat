@@ -151,7 +151,7 @@ export class FindTextInFilesResult extends PromptElement<FindTextInFilesResultPr
 
 		for (const match of textMatchesAll) {
 			const uniqueRanges = match.ranges.filter(rangeInfo => {
-				const key = `${match.uri.toString()}:${rangeInfo.sourceRange.start.line}:${rangeInfo.sourceRange.start.character}`;
+				const key = `${match.uri.toString()}:${rangeInfo.sourceRange.start.line}`;
 				if (seenKeys.has(key)) {
 					return false;
 				}
