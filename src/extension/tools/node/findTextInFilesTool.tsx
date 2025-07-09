@@ -165,9 +165,6 @@ export class FindTextInFilesResult extends PromptElement<FindTextInFilesResultPr
 				});
 			}
 		}
-		if (textMatches.length > 100) {
-			return <>To many matches, make your query more precise</>;
-		}
 		const numResults = textMatches.reduce((acc, result) => acc + result.ranges.length, 0);
 		const resultCountToDisplay = Math.min(numResults, this.props.maxResults);
 		const numResultsText = numResults === 1 ? '1 match' : `${resultCountToDisplay} matches`;
