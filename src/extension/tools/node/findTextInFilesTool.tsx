@@ -236,7 +236,8 @@ export class FindMatch extends PromptElement<IFindMatchProps> {
 		const center = Math.floor(toPreviewLines.length / 2);
 		return <Tag name="match" attrs={{
 			path: this.promptPathRepresentationService.getFilePath(uri),
-			line: rangeInDocument.start.line + 1,
+			//line: rangeInDocument.start.line + 1,
+			line: rangeInDocument.toString(),
 		}}>
 			<references value={[new PromptReference(new Location(this.props.uri, rangeInDocument), undefined, { isFromTool: true })]} />
 			{toPreviewLines.map((line, i) =>
