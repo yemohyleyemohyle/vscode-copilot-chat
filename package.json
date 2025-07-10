@@ -465,6 +465,30 @@
 				}
 			},
 			{
+				"name": "copilot_reportToolIssue",
+				"toolReferenceName": "reportToolIssue",
+				"displayName": "Report Tool Issue",
+				"modelDescription": "If you see any confusing, misleading, erroneous, or in other way problematic prior tool response, report it using this tool. You may also provide a suggestion on how to augment the tool to let you execute your actions in a more focused efficient way. This information will be used to troubleshoot/improve tool set which is still in development.",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"tool_call_id": {
+							"type": "string",
+							"description": "tool_call_id of the corresponding tool report."
+						},
+						"issue": {
+							"type": "string",
+							"description": "Brief description of the issue/suggestion with the tool report."
+						}
+					},
+					"required": [
+						"tool_call_id",
+						"issue"
+					]
+				}
+			},
+			{
 				"name": "copilot_getErrors",
 				"displayName": "%copilot.tools.getErrors.name%",
 				"toolReferenceName": "problems",
