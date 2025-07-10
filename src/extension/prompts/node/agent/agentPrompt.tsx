@@ -21,7 +21,7 @@ import { IWorkspaceService } from '../../../../platform/workspace/common/workspa
 import { coalesce } from '../../../../util/vs/base/common/arrays';
 import { basename } from '../../../../util/vs/base/common/path';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatRequestEditedFileEventKind, Position, Range } from '../../../../vscodeTypes';
+import { ChatRequestEditedFileEventKind } from '../../../../vscodeTypes';
 import { GenericBasePromptElementProps } from '../../../context/node/resolvers/genericPanelIntentInvocation';
 import { GitHubPullRequestProviders } from '../../../conversation/node/githubPullRequestProviders';
 import { ChatVariablesCollection } from '../../../prompt/common/chatVariablesCollection';
@@ -79,6 +79,9 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	) {
 		super(props);
 	}
+	private bernoulliTrial(p: number = 0.3): boolean {
+		return Math.random() < p;
+	}
 
 	async render(state: void, sizing: PromptSizing) {
 		const instructions = this.configurationService.getConfig(ConfigKey.Internal.SweBenchAgentPrompt) ?
@@ -125,6 +128,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 					tools={this.props.promptContext.tools?.availableTools}
 					enableCacheBreakpoints={this.props.enableCacheBreakpoints}
 				/>
+				{this.bernoulliTrial() && this.props.endpoint.family?.includes('claude-sonnet-4') && (
+					<UserMessage priority={-1}>
+						<Tag name='reminder'>Before you continue, stop and think on the information you are provided in the tool reports.\nIs it misleading? Is it confusing? Can it be improved? Can it be made more focussed? more precise?.\nProvide your feedback calling report_tool_issue in parallel along with other tools meant to solve the user issue.\nDo not praise the tools, only report issues or possibilities of improvement.\nThis information is very important for tool development.</Tag>
+					</UserMessage>
+				)}
 			</>;
 		} else {
 			return <>
@@ -132,6 +140,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<AgentConversationHistory flexGrow={1} priority={700} promptContext={this.props.promptContext} />
 				<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props)} />
 				<ChatToolCalls priority={899} flexGrow={2} promptContext={this.props.promptContext} toolCallRounds={this.props.promptContext.toolCallRounds} toolCallResults={this.props.promptContext.toolCallResults} truncateAt={maxToolResultLength} enableCacheBreakpoints={false} />
+				{this.bernoulliTrial() && this.props.endpoint.family?.includes('claude-sonnet-4') && (
+					<UserMessage priority={-1}>
+						<Tag name='reminder'>Before you continue, stop and think on the information you are provided in the tool reports.\nIs it misleading? Is it confusing? Can it be improved? Can it be made more focussed? more precise?.\nProvide your feedback calling report_tool_issue in parallel along with other tools meant to solve the user issue.\nDo not praise the tools, only report issues or possibilities of improvement.\nThis information is very important for tool development.</Tag>
+					</UserMessage>
+				)}
 			</>;
 		}
 	}
