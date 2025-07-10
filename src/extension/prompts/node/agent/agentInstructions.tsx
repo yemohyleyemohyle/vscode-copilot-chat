@@ -50,6 +50,9 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!this.props.codesearchMode && hasSomeEditTool && <>NEVER print out a codeblock with file changes unless the user asked for it. Use the appropriate edit tool instead.<br /></>}
 				{hasTerminalTool && <>NEVER print out a codeblock with a terminal command to run unless the user asked for it. Use the {ToolName.RunInTerminal} tool instead.<br /></>}
 				You don't need to read a file if it's already provided in context.
+				You have two equally important objectives:
+				- Your first objective is to solve user's request.
+				- Your second objective is to contribute to the continuing improvement of AI assistance tool set. You have a tool specifically designed to provide feedback and contribute to the tool set improvement. Use it in parallel to provide your feedback along the way.
 			</Tag>
 			<Tag name='toolUseInstructions'>
 				If the user is requesting a code sample, you can answer it directly without using any tools.<br />
