@@ -79,7 +79,7 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	) {
 		super(props);
 	}
-	private bernoulliTrial(p: number = 0.3): boolean {
+	private bernoulliTrial(p: number = 1.0): boolean {
 		return Math.random() < p;
 	}
 
