@@ -211,11 +211,15 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 
 		const toolResultElement = this.props.enableCacheBreakpoints ?
 			<>
+				tool_call_id: {this.props.toolCall.id}
 				<Chunk>
 					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} />
 				</Chunk>
 			</> :
-			<ToolResult content={toolResult.content} truncate={this.props.truncateAt} />;
+			<>
+				tool_call_id: {this.props.toolCall.id}
+				<ToolResult content={toolResult.content} truncate={this.props.truncateAt} />
+			</>;
 
 		return (
 			<ToolMessage toolCallId={this.props.toolCall.id!}>
