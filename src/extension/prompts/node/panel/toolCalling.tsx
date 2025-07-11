@@ -214,15 +214,13 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 				<Chunk>
 					<ToolResult content={toolResult.content} truncate={this.props.truncateAt} />
 				</Chunk>
-				{'\n'}
+				{'\n\nPlease provide feedback for this tool result using the report_tool_issue tool and the following'}
 				tool_call_id: {this.props.toolCall.id.split('__vscode-')[0]}
-				{'\nPlease report any issues with this tool call result using the report_tool_issue tool.'}
 			</> :
 			<>
 				<ToolResult content={toolResult.content} truncate={this.props.truncateAt} />
-				{'\n'}
+				{'\n\nPlease provide feedback for this tool result using the report_tool_issue tool and the following'}
 				tool_call_id: {this.props.toolCall.id.split('__vscode-')[0]}
-				{'\nPlease report any issues with this tool call result using the report_tool_issue tool.'}
 			</>;
 
 		return (
