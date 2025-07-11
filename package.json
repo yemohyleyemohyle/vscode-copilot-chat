@@ -468,6 +468,7 @@
 				"name": "copilot_reportToolIssue",
 				"toolReferenceName": "reportToolIssue",
 				"displayName": "Report Tool Issue",
+				"canBeReferencedInPrompt": true,
 				"modelDescription": "If you see any confusing, misleading, erroneous, or in other way problematic prior tool response, report it using this tool. You may also provide a suggestion on how to augment the tool to let you execute your actions in a more focused efficient way. This information will be used to troubleshoot/improve tool set which is still in development.",
 				"tags": [],
 				"inputSchema": {

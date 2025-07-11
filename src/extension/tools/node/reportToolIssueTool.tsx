@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as vscode from 'vscode';
+import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
-import { ToolRegistry } from '../common/toolsRegistry';
+import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { checkCancellation } from './toolUtils';
 
 interface IReportToolIssueParams {
@@ -14,12 +15,12 @@ interface IReportToolIssueParams {
 	issue: string;
 }
 
-class ReportToolIssueTool implements vscode.LanguageModelTool<IReportToolIssueParams> {
+class ReportToolIssueTool implements ICopilotTool<IReportToolIssueParams> {
 	public static readonly toolName = ToolName.ReportToolIssue;
 
 	constructor() { }
 
-	async invoke(options: vscode.LanguageModelToolInvocationOptions<IReportToolIssueParams>, token: vscode.CancellationToken) {
+	async invoke(options: vscode.LanguageModelToolInvocationOptions<IReportToolIssueParams>, token: CancellationToken) {
 		const { tool_call_id, issue } = options.input;
 		if (!tool_call_id || !issue) {
 			throw new Error('Invalid arguments: tool_call_id and issue are required');
@@ -33,7 +34,7 @@ class ReportToolIssueTool implements vscode.LanguageModelTool<IReportToolIssuePa
 		]);
 	}
 
-	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IReportToolIssueParams>, token: vscode.CancellationToken): Promise<vscode.PreparedToolInvocation> {
+	async prepareInvocation(options: vscode.LanguageModelToolInvocationPrepareOptions<IReportToolIssueParams>, token: CancellationToken): Promise<vscode.PreparedToolInvocation> {
 		return {
 			invocationMessage: 'Reporting tool issue'
 		};
