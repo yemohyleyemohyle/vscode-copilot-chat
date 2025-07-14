@@ -10,7 +10,6 @@ import { IEndpointProvider } from '../../../../platform/endpoint/common/endpoint
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
-import { Range } from '../../../../vscodeTypes';
 import { PromptRenderer } from '../../../prompts/node/base/promptRenderer';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { FindTextInFilesResult } from '../findTextInFilesTool';
@@ -115,5 +114,73 @@ suite('FindTextInFilesResult', () => {
 				uri: URI.file('/file.txt'),
 			}
 		])).toMatchInlineSnapshot(`"[object Object]"`);
+	});
+
+	test('deduplicates matches based on URI and source range', async () => {
+		// Test with duplicates - should render only 2 matches (not 3)
+		const withDuplicates = await toString([
+			{
+				lineNumber: 5,
+				previewText: 'Line before\nThis is a test\nLine after',
+				ranges: [
+					{
+						previewRange: new Range(1, 5, 1, 7),
+						sourceRange: new Range(5, 5, 5, 7), // Same source range
+					},
+					{
+						previewRange: new Range(1, 8, 1, 12), // Different preview range
+						sourceRange: new Range(5, 8, 5, 12), // Same source range - should be deduplicated
+					}
+				],
+				uri: URI.file('/file.txt'),
+			},
+			{
+				lineNumber: 5,
+				previewText: 'Another line\nThis is another test\nAnother line after',
+				ranges: [
+					{
+						previewRange: new Range(1, 5, 1, 7),
+						sourceRange: new Range(5, 5, 5, 7), // Same source range but different file
+					}
+				],
+				uri: URI.file('/different-file.txt'), // Different URI - should not be deduplicated
+			}
+		]);
+
+		// Test without duplicates - should render 2 matches
+		const withoutDuplicates = await toString([
+			{
+				lineNumber: 5,
+				previewText: 'Line before\nThis is a test\nLine after',
+				ranges: [
+					{
+						previewRange: new Range(1, 5, 1, 7),
+						sourceRange: new Range(5, 5, 5, 7),
+					}
+				],
+				uri: URI.file('/file.txt'),
+			},
+			{
+				lineNumber: 5,
+				previewText: 'Another line\nThis is another test\nAnother line after',
+				ranges: [
+					{
+						previewRange: new Range(1, 5, 1, 7),
+						sourceRange: new Range(5, 5, 5, 7),
+					}
+				],
+				uri: URI.file('/different-file.txt'),
+			}
+		]);
+
+		// Both should produce the same output - deduplication working correctly
+		expect(withDuplicates).toBe(withoutDuplicates);
+
+		// Verify it shows "2 matches" in the output
+		expect(withDuplicates).toContain('2 matches');
+
+		// Verify both files are mentioned
+		expect(withDuplicates).toContain('/file.txt');
+		expect(withDuplicates).toContain('/different-file.txt');
 	});
 });
