@@ -10,6 +10,7 @@ import { IEndpointProvider } from '../../../../platform/endpoint/common/endpoint
 import { ITestingServicesAccessor } from '../../../../platform/test/node/services';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../../util/vs/platform/instantiation/common/instantiation';
+import { Range } from '../../../../vscodeTypes';
 import { PromptRenderer } from '../../../prompts/node/base/promptRenderer';
 import { createExtensionUnitTestingServices } from '../../../test/node/services';
 import { FindTextInFilesResult } from '../findTextInFilesTool';
