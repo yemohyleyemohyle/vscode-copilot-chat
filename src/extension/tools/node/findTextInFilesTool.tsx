@@ -16,7 +16,7 @@ import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, Location, MarkdownString, Range } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, Location, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
@@ -145,6 +145,12 @@ export class FindTextInFilesResult extends PromptElement<FindTextInFilesResultPr
 		if (textMatchesAll.length === 0) {
 			return <>No matches found</>;
 		}
+		const numResults = textMatchesAll.reduce((acc, result) => acc + result.ranges.length, 0);
+		const resultCountToDisplay = Math.min(numResults, this.props.maxResults);
+		const numResultsText = numResults === 1 ? '1 match' : `${resultCountToDisplay} matches`;
+		const maxResultsTooLargeText = this.props.askedForTooManyResults ? ` (maxResults capped at ${MaxResultsCap})` : '';
+		const maxResultsText = numResults > this.props.maxResults ? ` (more results are available)` : '';
+
 		// Deduplicate matches based on URI and source range
 		const textMatches: vscode.TextSearchMatch2[] = [];
 		const seenKeys = new Set<string>();
@@ -165,11 +171,6 @@ export class FindTextInFilesResult extends PromptElement<FindTextInFilesResultPr
 				});
 			}
 		}
-		const numResults = textMatches.reduce((acc, result) => acc + result.ranges.length, 0);
-		const resultCountToDisplay = Math.min(numResults, this.props.maxResults);
-		const numResultsText = numResults === 1 ? '1 match' : `${resultCountToDisplay} matches`;
-		const maxResultsTooLargeText = this.props.askedForTooManyResults ? ` (maxResults capped at ${MaxResultsCap})` : '';
-		const maxResultsText = numResults > this.props.maxResults ? ` (more results are available)` : '';
 		return <>
 			{<TextChunk priority={20}>{numResultsText}{maxResultsText}{maxResultsTooLargeText}</TextChunk>}
 			{textMatches.flatMap(result => {
