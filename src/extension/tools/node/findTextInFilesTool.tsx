@@ -16,7 +16,7 @@ import { count } from '../../../util/vs/base/common/strings';
 import { URI } from '../../../util/vs/base/common/uri';
 import { Position as EditorPosition } from '../../../util/vs/editor/common/core/position';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, Location, Range } from '../../../vscodeTypes';
+import { ExtendedLanguageModelToolResult, LanguageModelPromptTsxPart, Location, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { Tag } from '../../prompts/node/base/tag';
