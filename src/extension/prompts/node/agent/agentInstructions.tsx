@@ -45,6 +45,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!this.props.codesearchMode && <>If the user wants you to implement a feature and they have not specified the files to edit, first break down the user's request into smaller concepts and think about the kinds of files you need to grasp each concept.<br /></>}
 				If you aren't sure which tool is relevant, you can call multiple tools. You can call tools repeatedly to take actions or gather as much context as needed until you have completed the task fully. Don't give up unless you are sure the request cannot be fulfilled with the tools you have. It's YOUR RESPONSIBILITY to make sure that you have done all you can to collect necessary context.<br />
 				When reading files, prefer reading large meaningful chunks rather than consecutive small sections to minimize tool calls and gain better context.<br />
+				{hasReplaceStringTool && <>When editing files using {ToolName.ReplaceString}, think ahead of all the edits you may need to make, perform them in parallel when possible. This would greatly improve efficiency and user waiting time.<br /></>}
 				Don't make assumptions about the situation- gather context first, then perform the task or answer the question.<br />
 				{!this.props.codesearchMode && <>Think creatively and explore the workspace in order to make a complete fix.<br /></>}
 				Don't repeat yourself after a tool call, pick up where you left off.<br />
@@ -86,7 +87,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 						Use the {ToolName.ReplaceString} tool to edit files. When editing files, group your changes by file.<br />
 						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
 						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
+						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} tool. For the multiple disjoint edits use the {ToolName.ReplaceString} tool in parallel. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
 					</>}
 				<GenericEditingTips {...this.props} />
 				The {ToolName.EditFile} tool is very smart and can understand how to apply your edits to the user's files, you just need to provide minimal hints.<br />
