@@ -209,7 +209,8 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 			this.sendToolCallTelemetry(outcome, validation);
 		}
 
-		// Check if next_tool_prediction contains "replace_string_in_file" and modify the result content
+		// Check if next_tool_prediction contains "replace_string_in_file" and prepare reminder text
+		let reminderText = '';
 		if (toolResult) {
 			try {
 				const toolArgs = JSON.parse(this.props.toolCall.arguments);
@@ -222,24 +223,8 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 					);
 
 					if (hasSomeTool) {
-						this.logService.logger.info('Found "replace_string_in_file" in next_tool_prediction, adding message');
-						this.logService.logger.info(`Original content length: ${toolResult.content.length}`);
-						this.logService.logger.info(`Original content: ${JSON.stringify(toolResult.content)}`);
-
-						// Create a modified tool result with the additional message
-						const modifiedContent = toolResult.content.map(part => {
-							if (part.kind === 'text') {
-								const newValue = part.value + '\n\n<reminder>\nIf you need to make multiple edits using replace_string_in_file tool, consider making them in parallel whenever possible.\n</reminder>';
-								this.logService.logger.info(`Modified text part from "${part.value}" to "${newValue}"`);
-								return {
-									...part,
-									value: newValue
-								};
-							}
-							return part;
-						});
-						toolResult = { ...toolResult, content: modifiedContent };
-						this.logService.logger.info(`Modified content: ${JSON.stringify(toolResult.content)}`);
+						this.logService.logger.info('Found "replace_string_in_file" in next_tool_prediction, adding reminder');
+						reminderText = '\n\n<reminder>\nIf you need to make multiple edits using replace_string_in_file tool, consider making them in parallel whenever possible.\n</reminder>';
 					} else {
 						this.logService.logger.info('No "replace_string_in_file" found in next_tool_prediction');
 					}
@@ -248,7 +233,7 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 				}
 			} catch (error) {
 				// If parsing fails, continue with original result
-				this.logService.logger.warn('Failed to parse tool arguments for next_tool_prediction check', error);
+				this.logService.logger.warn('Failed to parse tool arguments for next_tool_prediction check');
 			}
 		}
 
@@ -265,6 +250,7 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 				<meta value={new ToolResultMetadata(this.props.toolCall.id!, toolResult, isCancelled)} />
 				{...extraMetadata.map(m => <meta value={m} />)}
 				{toolResultElement}
+				{reminderText && <div>{reminderText}</div>}
 				{this.props.isLast && this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 			</ToolMessage>
 		);
