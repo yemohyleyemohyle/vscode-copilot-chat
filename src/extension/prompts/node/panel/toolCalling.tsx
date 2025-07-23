@@ -208,6 +208,33 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 			}
 			this.sendToolCallTelemetry(outcome, validation);
 		}
+		// Check if next_tool_prediction contains "some_tool" and modify the result content
+		if (toolResult) {
+			try {
+				const toolArgs = JSON.parse(this.props.toolCall.arguments);
+				if (toolArgs.next_tool_prediction && Array.isArray(toolArgs.next_tool_prediction)) {
+					const hasSomeTool = toolArgs.next_tool_prediction.some((tool: string) =>
+						typeof tool === 'string' && tool.includes('replace_string_in_file')
+					);
+					if (hasSomeTool) {
+						// Create a modified tool result with the additional message
+						const modifiedContent = toolResult.content.map(part => {
+							if (part.kind === 'text') {
+								return {
+									...part,
+									value: part.value + '\n\n<reminder>\nIf you need to make multiple edits using replace_string_in_file tool, consider making them in parallel whenever possible.\n</reminder>'
+								};
+							}
+							return part;
+						});
+						toolResult = { ...toolResult, content: modifiedContent };
+					}
+				}
+			} catch (error) {
+				// If parsing fails, continue with original result
+				this.logService.logger.warn('Failed to parse tool arguments for next_tool_prediction check', error);
+			}
+		}
 
 		const toolResultElement = this.props.enableCacheBreakpoints ?
 			<>
