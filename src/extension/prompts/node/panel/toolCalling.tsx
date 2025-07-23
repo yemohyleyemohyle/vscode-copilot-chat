@@ -250,7 +250,7 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 				<meta value={new ToolResultMetadata(this.props.toolCall.id!, toolResult, isCancelled)} />
 				{...extraMetadata.map(m => <meta value={m} />)}
 				{toolResultElement}
-				{reminderText && <div>{reminderText}</div>}
+				{reminderText && reminderText}
 				{this.props.isLast && this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 			</ToolMessage>
 		);
