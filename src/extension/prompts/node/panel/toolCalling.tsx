@@ -208,15 +208,21 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 			}
 			this.sendToolCallTelemetry(outcome, validation);
 		}
-		// Check if next_tool_prediction contains "some_tool" and modify the result content
+
+		// Check if next_tool_prediction contains "replace_string_in_file" and modify the result content
 		if (toolResult) {
 			try {
 				const toolArgs = JSON.parse(this.props.toolCall.arguments);
+				this.logService.logger.info(`Tool call arguments parsed: ${JSON.stringify(toolArgs)}`);
+
 				if (toolArgs.next_tool_prediction && Array.isArray(toolArgs.next_tool_prediction)) {
+					this.logService.logger.info(`Found next_tool_prediction: ${JSON.stringify(toolArgs.next_tool_prediction)}`);
 					const hasSomeTool = toolArgs.next_tool_prediction.some((tool: string) =>
 						typeof tool === 'string' && tool.includes('replace_string_in_file')
 					);
+
 					if (hasSomeTool) {
+						this.logService.logger.info('Found "replace_string_in_file" in next_tool_prediction, adding message');
 						// Create a modified tool result with the additional message
 						const modifiedContent = toolResult.content.map(part => {
 							if (part.kind === 'text') {
@@ -228,7 +234,11 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 							return part;
 						});
 						toolResult = { ...toolResult, content: modifiedContent };
+					} else {
+						this.logService.logger.info('No "replace_string_in_file" found in next_tool_prediction');
 					}
+				} else {
+					this.logService.logger.info('No next_tool_prediction found or not an array');
 				}
 			} catch (error) {
 				// If parsing fails, continue with original result
