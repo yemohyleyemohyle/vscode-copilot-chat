@@ -223,17 +223,23 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 
 					if (hasSomeTool) {
 						this.logService.logger.info('Found "replace_string_in_file" in next_tool_prediction, adding message');
+						this.logService.logger.info(`Original content length: ${toolResult.content.length}`);
+						this.logService.logger.info(`Original content: ${JSON.stringify(toolResult.content)}`);
+
 						// Create a modified tool result with the additional message
 						const modifiedContent = toolResult.content.map(part => {
 							if (part.kind === 'text') {
+								const newValue = part.value + '\n\n<reminder>\nIf you need to make multiple edits using replace_string_in_file tool, consider making them in parallel whenever possible.\n</reminder>';
+								this.logService.logger.info(`Modified text part from "${part.value}" to "${newValue}"`);
 								return {
 									...part,
-									value: part.value + '\n\n<reminder>\nIf you need to make multiple edits using replace_string_in_file tool, consider making them in parallel whenever possible.\n</reminder>'
+									value: newValue
 								};
 							}
 							return part;
 						});
 						toolResult = { ...toolResult, content: modifiedContent };
+						this.logService.logger.info(`Modified content: ${JSON.stringify(toolResult.content)}`);
 					} else {
 						this.logService.logger.info('No "replace_string_in_file" found in next_tool_prediction');
 					}
