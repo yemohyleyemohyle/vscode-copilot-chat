@@ -45,7 +45,6 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!this.props.codesearchMode && <>If the user wants you to implement a feature and they have not specified the files to edit, first break down the user's request into smaller concepts and think about the kinds of files you need to grasp each concept.<br /></>}
 				If you aren't sure which tool is relevant, you can call multiple tools. You can call tools repeatedly to take actions or gather as much context as needed until you have completed the task fully. Don't give up unless you are sure the request cannot be fulfilled with the tools you have. It's YOUR RESPONSIBILITY to make sure that you have done all you can to collect necessary context.<br />
 				When reading files, prefer reading large meaningful chunks rather than consecutive small sections to minimize tool calls and gain better context.<br />
-				{hasReplaceStringTool && <>When editing files using {ToolName.ReplaceString}, think ahead of all the edits you may need to make, perform them in parallel when possible. This would greatly improve efficiency and user waiting time.<br /></>}
 				Don't make assumptions about the situation- gather context first, then perform the task or answer the question.<br />
 				{!this.props.codesearchMode && <>Think creatively and explore the workspace in order to make a complete fix.<br /></>}
 				Don't repeat yourself after a tool call, pick up where you left off.<br />
@@ -69,7 +68,10 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{hasTerminalTool && <>NEVER try to edit a file by running terminal commands unless the user specifically asks for it.<br /></>}
 				{!hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
 				{!hasTerminalTool && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
-				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.
+				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.<br />
+				For maximum efficiency, whenever you perform multiple independent operations, invoke all relevant tools simultaneously rather than sequentially. Prioritize calling tools in parallel whenever possible. For example, when reading 3 files, run 3 tool calls in parallel to read all 3 files into context at the same time. When running multiple read-only commands like `ls` or `list_dir`, always run all of the commands in parallel.<br />
+				{hasReplaceStringTool && <>When editing files using {ToolName.ReplaceString}, think ahead of all the edits you may need to make, perform them in parallel when possible. This would greatly improve efficiency and user waiting time.<br /></>}
+				Err on the side of maximizing parallel tool calls rather than running too many tools sequentially.
 			</Tag>
 			{this.props.codesearchMode && <CodesearchModeInstructions {...this.props} />}
 			{hasInsertEditTool && !hasApplyPatchTool && <Tag name='editFileInstructions'>

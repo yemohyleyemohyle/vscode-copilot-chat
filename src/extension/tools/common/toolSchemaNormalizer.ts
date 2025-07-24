@@ -82,7 +82,7 @@ const fnRules: ((family: string, node: OpenAiFunctionDef, didFix: (message: stri
 			const obj = n.parameters as ObjectJsonSchema;
 			if (obj.properties && !obj.properties.next_tool_prediction) {
 				obj.properties.next_tool_prediction = {
-					description: 'Provide a short list of tools you are most likely to use next. You do not have to follow your prediction, but it would still be helpful.',
+					description: 'Provide a short list of tools you are most likely to use next. Prioritize recall over precission, Correctly predicted tool would greatly improve efficiency, but you do not have to follow your prediction - solving user query the fastest way possible is a priority.',
 					type: 'array',
 					items: {
 						type: 'string'
