@@ -23,6 +23,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 0",
+      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -35,6 +36,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 1",
+      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -47,6 +49,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 2",
+      "thinking": undefined,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -77,6 +80,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 3",
+      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -89,6 +93,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 4",
+      "thinking": undefined,
       "toolCalls": [
         {
           "arguments": "some args here",
@@ -101,6 +106,7 @@ exports[`defaultIntentRequestHandler > ChatResult metadata after multiple turns 
     ToolCallRound {
       "id": "static-id",
       "response": "response number 5",
+      "thinking": undefined,
       "toolCalls": [],
       "toolInputRetry": 0,
     },
@@ -167,6 +173,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 0",
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -179,6 +186,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 1",
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -191,6 +199,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 2",
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -203,6 +212,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 3",
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -256,6 +266,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 4",
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -268,6 +279,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 5",
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -280,6 +292,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 6",
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -292,6 +305,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
       ToolCallRound {
         "id": "static-id",
         "response": "response number 7",
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -558,6 +572,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -577,6 +592,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -739,6 +755,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -758,6 +775,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -920,6 +938,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -939,6 +958,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1101,6 +1121,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1120,6 +1141,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1314,6 +1336,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1333,6 +1356,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1495,6 +1519,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1514,6 +1539,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1676,6 +1702,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1695,6 +1722,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1857,6 +1885,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -1876,6 +1905,7 @@ exports[`defaultIntentRequestHandler > confirms on max tool call iterations, and
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -2060,6 +2090,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
       ToolCallRound {
         "id": "static-id",
         "response": "some response here :)",
+        "thinking": undefined,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2095,6 +2126,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -2114,6 +2146,7 @@ exports[`defaultIntentRequestHandler > makes a successful request with a single 
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -2306,6 +2339,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
       ToolCallRound {
         "id": "static-id",
         "response": "some response here :)",
+        "thinking": undefined,
         "toolCalls": [
           {
             "arguments": "some args here",
@@ -2318,6 +2352,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 1`] = `
       ToolCallRound {
         "id": "static-id",
         "response": "response to tool call",
+        "thinking": undefined,
         "toolCalls": [],
         "toolInputRetry": 0,
       },
@@ -2353,6 +2388,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -2372,6 +2408,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -2534,6 +2571,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "conversationId": "some-session-id",
         "headerRequestId": "",
         "messageId": "some-uuid",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
@@ -2553,6 +2591,7 @@ exports[`defaultIntentRequestHandler > makes a tool call turn 2`] = `
         "headerRequestId": "",
         "messageId": "some-uuid",
         "messageText": "hello world!",
+        "mode": "ask",
         "offTopic": "false",
         "source": "user",
         "suggestion": "test",
