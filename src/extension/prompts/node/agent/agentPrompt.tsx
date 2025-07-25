@@ -305,7 +305,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getKeepGoingReminder(this.props.endpoint.family)}
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
-						{hasReplaceStringTool && <>When editing files using {ToolName.ReplaceString}, think ahead of all the edits you may need to make, perform them in parallel when possible. This would greatly improve efficiency and user waiting time.<br /></>}
+						{hasReplaceStringTool && <>For maximum efficiency, whenever you perform multiple edit operations using {ToolName.ReplaceString} tool, invoke them simultaneously rather than sequentially. This would greatly improve efficiency and user waiting time.<br /></>}
 					</Tag>
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
