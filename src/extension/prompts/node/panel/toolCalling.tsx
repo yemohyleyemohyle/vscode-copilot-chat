@@ -224,7 +224,7 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 
 					if (hasSomeTool) {
 						this.logService.logger.info('Found "replace_string_in_file" in next_tool_prediction, adding reminder');
-						reminderText = '';//'\n\n<reminder>\nFor maximum efficiency, whenever you perform multiple edit operations using replace_string_in_file tool, invoke them simultaneously rather than sequentially.\n</reminder>';
+						reminderText = '\n\n<reminder>\nFor maximum efficiency, whenever you perform multiple edit operations using replace_string_in_file tool, invoke them simultaneously rather than sequentially.\n</reminder>';
 					} else {
 						this.logService.logger.info('No "replace_string_in_file" found in next_tool_prediction');
 					}
