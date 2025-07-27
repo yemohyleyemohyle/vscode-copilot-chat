@@ -122,6 +122,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 					tools={this.props.promptContext.tools?.availableTools}
 					enableCacheBreakpoints={this.props.enableCacheBreakpoints}
 				/>
+				{this.shouldShowParallelizationReminder() && this.props.endpoint.family?.includes('claude-sonnet-4') && (
+					<UserMessage priority={-1}>
+						<Tag name='reminder'>For maximum efficiency, whenever you perform multiple non-overlapping edit operations using replace_string_in_file tool, invoke them simultaneously rather than sequentially.</Tag>
+					</UserMessage>
+				)}
 			</>;
 		} else {
 			return <>
@@ -129,6 +134,11 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 				<AgentConversationHistory flexGrow={1} priority={700} promptContext={this.props.promptContext} />
 				<AgentUserMessage flexGrow={2} priority={900} {...getUserMessagePropsFromAgentProps(this.props)} />
 				<ChatToolCalls priority={899} flexGrow={2} promptContext={this.props.promptContext} toolCallRounds={this.props.promptContext.toolCallRounds} toolCallResults={this.props.promptContext.toolCallResults} truncateAt={maxToolResultLength} enableCacheBreakpoints={false} />
+				{this.shouldShowParallelizationReminder() && this.props.endpoint.family?.includes('claude-sonnet-4') && (
+					<UserMessage priority={-1}>
+						<Tag name='reminder'>For maximum efficiency, whenever you perform multiple non-overlapping edit operations using replace_string_in_file tool, invoke them simultaneously rather than sequentially.</Tag>
+					</UserMessage>
+				)}
 			</>;
 		}
 	}
@@ -178,6 +188,38 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 			return msg;
 		}
 	}
+
+	/**
+	 * Check if the last edit tool in the conversation has next_tool_prediction containing replace_string_in_file
+	 */
+	private shouldShowParallelizationReminder(): boolean {
+		const toolCallRounds = this.props.promptContext.toolCallRounds;
+		if (!toolCallRounds?.length) {
+			return false;
+		}
+
+		// Get the last round of tool calls
+		const lastRound = toolCallRounds[toolCallRounds.length - 1];
+		if (!lastRound.toolCalls.length) {
+			return false;
+		}
+
+		// Check the last tool call in the last round
+		const lastToolCall = lastRound.toolCalls[lastRound.toolCalls.length - 1];
+		try {
+			const toolArgs = JSON.parse(lastToolCall.arguments);
+			if (toolArgs.next_tool_prediction && Array.isArray(toolArgs.next_tool_prediction)) {
+				return toolArgs.next_tool_prediction.some((tool: string) =>
+					typeof tool === 'string' && tool.includes('replace_string_in_file')
+				);
+			}
+		} catch (error) {
+			// If parsing fails, return false
+		}
+
+		return false;
+	}
+
 }
 
 interface GlobalAgentContextProps extends BasePromptElementProps {
