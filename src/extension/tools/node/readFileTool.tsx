@@ -19,7 +19,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
+import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
@@ -99,7 +99,7 @@ const getParamRanges = (params: ReadFileParams, snapshot: NotebookDocumentSnapsh
 	return { start, end, truncated };
 };
 
-class ReadFileTool implements ICopilotTool<ReadFileParams> {
+export class ReadFileTool implements ICopilotTool<ReadFileParams> {
 	public static toolName = ToolName.ReadFile;
 	private _promptContext: IBuildPromptContext | undefined;
 
@@ -223,7 +223,7 @@ class ReadFileTool implements ICopilotTool<ReadFileParams> {
 		);
 	}
 
-	async resolveInput(input: IReadFileParamsV1, promptContext: IBuildPromptContext): Promise<IReadFileParamsV1> {
+	async resolveInput(input: ReadFileParams, promptContext: IBuildPromptContext): Promise<ReadFileParams> {
 		this._promptContext = promptContext;
 		return input;
 	}

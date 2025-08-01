@@ -19,6 +19,7 @@ import './githubRepoTool';
 import './insertEditTool';
 import './installExtensionTool';
 import './listDirTool';
+import './multiReadFileTool';
 import './multiReplaceStringTool';
 import './newNotebookTool';
 import './newWorkspace/newWorkspaceTool';

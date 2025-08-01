@@ -28,6 +28,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 		const hasTerminalTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal);
 		const hasReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReplaceString);
 		const hasMultiReplaceStringTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.MultiReplaceString);
+		const hasMultiReadFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.MultiReadFile);
 		const hasInsertEditTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.EditFile);
 		const hasApplyPatchTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ApplyPatch);
 		const hasReadFileTool = !!this.props.availableTools?.find(tool => tool.name === ToolName.ReadFile);
@@ -61,6 +62,7 @@ export class DefaultAgentPrompt extends PromptElement<DefaultAgentPromptProps> {
 				NEVER say the name of a tool to a user. For example, instead of saying that you'll use the {ToolName.CoreRunInTerminal} tool, say "I'll run the command in a terminal".<br />
 				If you think running multiple tools can answer the user's question, prefer calling them in parallel whenever possible{hasCodebaseTool && <>, but do not call {ToolName.Codebase} in parallel.</>}<br />
 				{hasReadFileTool && <>When using the {ToolName.ReadFile} tool, prefer reading a large section over calling the {ToolName.ReadFile} tool many times in sequence. You can also think of all the pieces you may be interested in and read them in parallel. Read large enough context to ensure you get what you need.<br /></>}
+				{hasMultiReadFileTool && <>Prefer the {ToolName.MultiReadFile} tool when you need to read multiple files in a single operation, or when you need to read multiple chunks from a large file. This is significantly more efficient than calling {ToolName.ReadFile} multiple times and should be your first choice for: analyzing multiple configuration files, comparing implementations across files, understanding project structure, reading multiple sections from a large log file, or any scenario where you need multiple read operations at once.<br /></>}
 				{hasCodebaseTool && <>If {ToolName.Codebase} returns the full contents of the text files in the workspace, you have all the workspace context.<br /></>}
 				{hasFindTextTool && <>You can use the {ToolName.FindTextInFiles} to get an overview of a file by searching for a string within that one file, instead of using {ToolName.ReadFile} many times.<br /></>}
 				{hasCodebaseTool && <>If you don't know exactly the string or filename pattern you're looking for, use {ToolName.Codebase} to do a semantic search across the workspace.<br /></>}
