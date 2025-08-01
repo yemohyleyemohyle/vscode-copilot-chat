@@ -373,7 +373,7 @@
 				"name": "copilot_multiReadFile",
 				"toolReferenceName": "multiReadFile",
 				"displayName": "%copilot.tools.multiReadFile.name%",
-				"modelDescription": "This tool allows you to read multiple files in a single call, or multiple chunks from large files, which is more efficient than calling read_file multiple times. Use read_file for single file reads; use multiReadFile for multiple file reads (2+ files). It takes an array of file read operations and processes them sequentially. Each read operation has the same parameters as read_file: filePath, offset (optional), limit (optional), or startLine/endLine for v1 format. This tool is ideal when you need to: read multiple files for analysis, comparison, or understanding project structure; read multiple sections from large log files; or any scenario requiring multiple read operations. The tool will provide a summary of successful and failed operations.",
+				"modelDescription": "This tool allows you to read multiple files in a single call using specific line ranges, which is more efficient than calling read_file multiple times. Use read_file for single file reads; use multiReadFile for multiple file reads (2+ files). It takes an array of file read operations with filePath, startLine, and endLine parameters. This tool is ideal when you need to: read multiple files for analysis, comparison, or understanding project structure; read specific sections from multiple files; or any scenario requiring multiple read operations with known line ranges. The tool will provide a summary of successful and failed operations.",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
@@ -383,47 +383,25 @@
 						},
 						"files": {
 							"type": "array",
-							"description": "An array of file read operations to process sequentially.",
+							"description": "An array of file read operations to process sequentially. Each operation specifies a file path and line range.",
 							"items": {
 								"type": "object",
-								"oneOf": [
-									{
-										"description": "V1 format: Read a specific line range",
-										"properties": {
-											"filePath": {
-												"type": "string",
-												"description": "The absolute path of the file to read."
-											},
-											"startLine": {
-												"type": "number",
-												"description": "The line number to start reading from, 1-based."
-											},
-											"endLine": {
-												"type": "number",
-												"description": "The inclusive line number to end reading at, 1-based."
-											}
-										},
-										"required": ["filePath", "startLine", "endLine"]
+								"description": "Read a specific line range from a file",
+								"properties": {
+									"filePath": {
+										"type": "string",
+										"description": "The absolute path of the file to read."
 									},
-									{
-										"description": "V2 format: Read with offset and limit (more flexible for large files)",
-										"properties": {
-											"filePath": {
-												"type": "string",
-												"description": "The absolute path of the file to read."
-											},
-											"offset": {
-												"type": "number",
-												"description": "Optional: the 1-based line number to start reading from. If not specified, starts from the beginning."
-											},
-											"limit": {
-												"type": "number",
-												"description": "Optional: the maximum number of lines to read. Use with offset for large files."
-											}
-										},
-										"required": ["filePath"]
+									"startLine": {
+										"type": "number",
+										"description": "The line number to start reading from, 1-based."
+									},
+									"endLine": {
+										"type": "number",
+										"description": "The inclusive line number to end reading at, 1-based."
 									}
-								]
+								},
+								"required": ["filePath", "startLine", "endLine"]
 							},
 							"minItems": 1
 						}

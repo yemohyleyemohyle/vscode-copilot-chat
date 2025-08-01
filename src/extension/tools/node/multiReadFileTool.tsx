@@ -10,11 +10,11 @@ import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
-import { ReadFileParams, ReadFileTool } from './readFileTool';
+import { IReadFileParamsV1, ReadFileTool } from './readFileTool';
 
 export interface IMultiReadFileToolParams {
 	explanation: string;
-	files: ReadFileParams[];
+	files: IReadFileParamsV1[];
 }
 
 export interface IMultiReadResult {
@@ -22,7 +22,7 @@ export interface IMultiReadResult {
 	successfulReads: number;
 	failedReads: number;
 	results: Array<{
-		operation: ReadFileParams;
+		operation: IReadFileParamsV1;
 		success: boolean;
 		error?: string;
 		result?: LanguageModelToolResult;
