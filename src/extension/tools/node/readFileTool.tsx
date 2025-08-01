@@ -19,7 +19,7 @@ import { IWorkspaceService } from '../../../platform/workspace/common/workspaceS
 import { clamp } from '../../../util/vs/base/common/numbers';
 import { URI } from '../../../util/vs/base/common/uri';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location } from '../../../vscodeTypes';
+import { LanguageModelPromptTsxPart, LanguageModelToolResult, Location, MarkdownString, Range } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { renderPromptElementJSON } from '../../prompts/node/base/promptRenderer';
 import { CodeBlock } from '../../prompts/node/panel/safeElements';
