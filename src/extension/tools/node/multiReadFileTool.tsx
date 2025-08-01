@@ -5,7 +5,7 @@
 
 import type * as vscode from 'vscode';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
+import { LanguageModelPromptTsxPart, LanguageModelTextPart, LanguageModelToolResult } from '../../../vscodeTypes';
 import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
@@ -25,6 +25,7 @@ export interface IMultiReadResult {
 		operation: ReadFileParams;
 		success: boolean;
 		error?: string;
+		result?: LanguageModelToolResult;
 	}>;
 }
 
@@ -60,6 +61,7 @@ export class MultiReadFileTool implements ICopilotTool<IMultiReadFileToolParams>
 
 		// Get the ReadFileTool instance
 		const readFileTool = this.instantiationService.createInstance(ReadFileTool);
+		const allResults: LanguageModelToolResult[] = [];
 
 		// Process file reads sequentially
 		for (let i = 0; i < typedOptions.input.files.length; i++) {
@@ -80,13 +82,17 @@ export class MultiReadFileTool implements ICopilotTool<IMultiReadFileToolParams>
 				// Set the prompt context for the read tool
 				await readFileTool.resolveInput(fileRead, this._promptContext);
 
-				// Invoke the read file tool
-				await readFileTool.invoke(readOptions as any, token);
+				// Invoke the read file tool and capture its result
+				const readResult = await readFileTool.invoke(readOptions as any, token);
+
+				// Store the result
+				allResults.push(readResult);
 
 				// Record success
 				results.results.push({
 					operation: fileRead,
-					success: true
+					success: true,
+					result: readResult
 				});
 				results.successfulReads++;
 
@@ -101,34 +107,63 @@ export class MultiReadFileTool implements ICopilotTool<IMultiReadFileToolParams>
 				results.failedReads++;
 
 				// Add error information to the stream using the correct method
-				(this._promptContext.stream as any).markdown(`\n⚠️ **Failed read operation ${i + 1}:**\n`);
-				(this._promptContext.stream as any).markdown(`- File: \`${fileRead.filePath}\`\n`);
-				(this._promptContext.stream as any).markdown(`- Error: ${errorMessage}\n\n`);
+				if (this._promptContext?.stream) {
+					(this._promptContext.stream as any).markdown(`\n⚠️ **Failed read operation ${i + 1}:**\n`);
+					(this._promptContext.stream as any).markdown(`- File: \`${fileRead.filePath}\`\n`);
+					(this._promptContext.stream as any).markdown(`- Error: ${errorMessage}\n\n`);
+				}
 			}
 		}
 
-		// Provide summary using the correct method
-		(this._promptContext.stream as any).markdown(`\n## Multi-Read Summary\n\n`);
-		(this._promptContext.stream as any).markdown(`- **Total operations:** ${results.totalFiles}\n`);
-		(this._promptContext.stream as any).markdown(`- **Successfully read:** ${results.successfulReads}\n`);
-		(this._promptContext.stream as any).markdown(`- **Failed:** ${results.failedReads}\n\n`);
+		// Provide summary using the correct method if stream is available
+		if (this._promptContext?.stream) {
+			(this._promptContext.stream as any).markdown(`\n## Multi-Read Summary\n\n`);
+			(this._promptContext.stream as any).markdown(`- **Total operations:** ${results.totalFiles}\n`);
+			(this._promptContext.stream as any).markdown(`- **Successfully read:** ${results.successfulReads}\n`);
+			(this._promptContext.stream as any).markdown(`- **Failed:** ${results.failedReads}\n\n`);
+		}
 
-		if (results.failedReads > 0) {
-			(this._promptContext.stream as any).markdown(`### Failed Read Operations:\n\n`);
-			results.results.filter(r => !r.success).forEach((result, index) => {
-				if (this._promptContext?.stream) {
-					(this._promptContext.stream as any).markdown(`${index + 1}. **${result.operation.filePath}**\n`);
-					(this._promptContext.stream as any).markdown(`   - Error: ${result.error || 'Unknown error'}\n\n`);
+		// Return the aggregated results
+		const allParts: (LanguageModelTextPart | LanguageModelPromptTsxPart)[] = [];
+
+		// Add a summary header with more details
+		if (results.successfulReads === 0 && results.failedReads > 0) {
+			allParts.push(new LanguageModelTextPart(`❌ Multi-read operation failed: ${results.failedReads}/${results.totalFiles} operations failed.\n\n`));
+		} else if (results.failedReads > 0) {
+			allParts.push(new LanguageModelTextPart(`⚠️ Multi-read operation partially completed: ${results.successfulReads}/${results.totalFiles} operations successful.\n\n`));
+		} else {
+			allParts.push(new LanguageModelTextPart(`✅ Multi-read operation completed: ${results.successfulReads}/${results.totalFiles} operations successful.\n\n`));
+		}
+
+		// Add all the individual file results first
+		let hasContent = false;
+		allResults.forEach((result, index) => {
+			if (result.content && result.content.length > 0) {
+				hasContent = true;
+				// Add a separator for multiple files (but not before the first one)
+				if (index > 0) {
+					allParts.push(new LanguageModelTextPart('\n\n---\n\n'));
 				}
+				// Add all content parts from this read operation
+				allParts.push(...result.content);
+			}
+		});
+
+		// Add failure details prominently if there were any failures and no content
+		if (results.failedReads > 0) {
+			if (!hasContent) {
+				allParts.push(new LanguageModelTextPart('\n'));
+			} else {
+				allParts.push(new LanguageModelTextPart('\n\n---\n\n'));
+			}
+			allParts.push(new LanguageModelTextPart('## ❌ Failed Read Operations:\n\n'));
+			results.results.filter(r => !r.success).forEach((result, index) => {
+				allParts.push(new LanguageModelTextPart(`**${index + 1}. ${result.operation.filePath}**\n`));
+				allParts.push(new LanguageModelTextPart(`- **Error:** ${result.error || 'Unknown error'}\n\n`));
 			});
 		}
 
-		// Return a simple result
-		return new LanguageModelToolResult([
-			new LanguageModelTextPart(
-				`Multi-read operation completed: ${results.successfulReads}/${results.totalFiles} operations successful.`
-			)
-		]);
+		return new LanguageModelToolResult(allParts);
 	}
 
 	async resolveInput(input: IMultiReadFileToolParams, promptContext: IBuildPromptContext): Promise<IMultiReadFileToolParams> {
