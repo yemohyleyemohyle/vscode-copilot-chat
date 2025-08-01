@@ -373,7 +373,7 @@
 				"name": "copilot_multiReadFile",
 				"toolReferenceName": "multiReadFile",
 				"displayName": "%copilot.tools.multiReadFile.name%",
-				"modelDescription": "This tool allows you to read multiple files in a single call, or multiple chunks from large files, which is more efficient than calling read_file multiple times. It takes an array of file read operations and processes them sequentially. Each read operation has the same parameters as read_file: filePath, offset (optional), limit (optional), or startLine/endLine for v1 format. This tool is ideal when you need to: read multiple files for analysis, comparison, or understanding project structure; read multiple sections from large log files; or any scenario requiring multiple read operations. The tool will provide a summary of successful and failed operations.",
+				"modelDescription": "This tool allows you to read multiple files in a single call, or multiple chunks from large files, which is more efficient than calling read_file multiple times. Use read_file for single file reads; use multiReadFile for multiple file reads (2+ files). It takes an array of file read operations and processes them sequentially. Each read operation has the same parameters as read_file: filePath, offset (optional), limit (optional), or startLine/endLine for v1 format. This tool is ideal when you need to: read multiple files for analysis, comparison, or understanding project structure; read multiple sections from large log files; or any scenario requiring multiple read operations. The tool will provide a summary of successful and failed operations.",
 				"inputSchema": {
 					"type": "object",
 					"properties": {
