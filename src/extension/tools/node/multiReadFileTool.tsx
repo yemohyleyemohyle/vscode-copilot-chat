@@ -10,7 +10,7 @@ import { IBuildPromptContext } from '../../prompt/common/intents';
 import { ToolName } from '../common/toolNames';
 import { ICopilotTool, ToolRegistry } from '../common/toolsRegistry';
 import { IToolsService } from '../common/toolsService';
-import { IReadFileParamsV1, ReadFileTool } from './readFileTool';
+import { IReadFileParamsV1 } from './readFileTool';
 
 export interface IMultiReadFileToolParams {
 	explanation: string;
@@ -59,8 +59,7 @@ export class MultiReadFileTool implements ICopilotTool<IMultiReadFileToolParams>
 			results: []
 		};
 
-		// Get the ReadFileTool instance
-		const readFileTool = this.instantiationService.createInstance(ReadFileTool);
+		// Process file reads sequentially using the tools service
 		const allResults: LanguageModelToolResult[] = [];
 
 		// Process file reads sequentially
@@ -73,32 +72,42 @@ export class MultiReadFileTool implements ICopilotTool<IMultiReadFileToolParams>
 					throw new Error(`Invalid file read at index ${i}: filePath is required`);
 				}
 
-				// Create a new tool invocation options for this file read
+				// Use the tools service to invoke the read_file tool
 				const readOptions = {
-					...typedOptions,
-					input: fileRead
-				};
+					input: fileRead,
+					model: typedOptions.model,
+					chatRequestId: typedOptions.chatRequestId
+				} as any;
 
-				// Set the prompt context for the read tool
-				await readFileTool.resolveInput(fileRead, this._promptContext);
+				const readResult = await this.toolsService.invokeTool(
+					ToolName.ReadFile,
+					readOptions,
+					token
+				);
 
-				// Invoke the read file tool and capture its result
-				const readResult = await readFileTool.invoke(readOptions as any, token);
+				// Convert LanguageModelToolResult2 to LanguageModelToolResult if needed
+				const convertedResult = readResult as any as LanguageModelToolResult;
 
 				// Store the result
-				allResults.push(readResult);
+				allResults.push(convertedResult);
 
 				// Record success
 				results.results.push({
 					operation: fileRead,
 					success: true,
-					result: readResult
+					result: convertedResult
 				});
 				results.successfulReads++;
 
 			} catch (error) {
 				// Record failure
-				const errorMessage = error instanceof Error ? error.message : String(error);
+				let errorMessage = error instanceof Error ? error.message : String(error);
+
+				// Provide more helpful error message for Range errors
+				if (errorMessage.includes('Range is not defined')) {
+					errorMessage = 'Range is not defined (readFileTool TSX rendering issue)';
+				}
+
 				results.results.push({
 					operation: fileRead,
 					success: false,
