@@ -306,6 +306,9 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 						{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 						<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 					</Tag>
+					<Tag name='reminderParallelization'>
+						For maximum efficiency, whenever you perform multiple independent operations, invoke corresponding tools simultaneously rather than sequentially. Avoid repeating tasks you already performed or any redundant tasks. This would greatly improve efficiency and user waiting time.<br />
+					</Tag>
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
 					{this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 				</UserMessage>

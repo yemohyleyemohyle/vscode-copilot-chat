@@ -207,6 +207,33 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 				}
 			}
 			this.sendToolCallTelemetry(outcome, validation);
+		}		// Check if next_tool_prediction contains "replace_string_in_file" and prepare reminder text
+		let reminderText = '';
+		if (toolResult) {
+			try {
+				const toolArgs = JSON.parse(this.props.toolCall.arguments);
+				this.logService.logger.info(`Tool call arguments parsed: ${JSON.stringify(toolArgs)}`);
+
+				if (toolArgs.next_tool_prediction && Array.isArray(toolArgs.next_tool_prediction)) {
+					this.logService.logger.info(`Found next_tool_prediction: ${JSON.stringify(toolArgs.next_tool_prediction)}`);
+					const hasSomeTool = toolArgs.next_tool_prediction.some((tool: string) =>
+						typeof tool === 'string' && tool.includes('replace_string_in_file')
+					);
+
+					if (hasSomeTool) {
+						this.logService.logger.info('Found "replace_string_in_file" in next_tool_prediction, adding reminder');
+						//reminderText = '\n\n<reminder>\nIf you need to make multiple edits using replace_string_in_file tool, consider making them in parallel whenever possible.\n</reminder>';
+						reminderText = '';
+					} else {
+						this.logService.logger.info('No "replace_string_in_file" found in next_tool_prediction');
+					}
+				} else {
+					this.logService.logger.info('No next_tool_prediction found or not an array');
+				}
+			} catch (error) {
+				// If parsing fails, continue with original result
+				this.logService.logger.warn('Failed to parse tool arguments for next_tool_prediction check');
+			}
 		}
 
 		const toolResultElement = this.props.enableCacheBreakpoints ?
@@ -222,6 +249,7 @@ class ToolResultElement extends PromptElement<ToolResultElementProps, void> {
 				<meta value={new ToolResultMetadata(this.props.toolCall.id!, toolResult, isCancelled)} />
 				{...extraMetadata.map(m => <meta value={m} />)}
 				{toolResultElement}
+				{reminderText && reminderText}
 				{this.props.isLast && this.props.enableCacheBreakpoints && <cacheBreakpoint type={CacheType} />}
 			</ToolMessage>
 		);
