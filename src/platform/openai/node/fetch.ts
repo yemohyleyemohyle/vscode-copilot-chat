@@ -580,7 +580,7 @@ async function fetchWithInstrumentation(
 			throw error;
 		})
 		.finally(() => {
-			sendEngineMessagesTelemetry(telemetryService, request.messages!, telemetryData);
+			sendEngineMessagesTelemetry(telemetryService, request.messages!, telemetryData, logService);
 		});
 }
 

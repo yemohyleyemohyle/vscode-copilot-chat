@@ -12,12 +12,47 @@ import { APIJsonData, CAPIChatMessage, ChatCompletion, rawMessageToCAPI } from '
 import { FinishedCompletion, convertToAPIJsonData } from './stream';
 
 // TODO @lramos15 - Find a better file for this, since this file is for the chat stream and should not be telemetry related
-export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData) {
+export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, logService?: ILogService) {
+	// Determine if this is input or output based on message characteristics
+	const isOutput = messages.length === 1 && messages[0].role === 'assistant';
+	const messageType = isOutput ? 'output' : 'input';
+
+	// Create messages with content replaced by length
+	const messagesWithLength = messages.map(msg => ({
+		...msg, // This preserves ALL existing fields including tool_calls, tool_call_id, copilot_references, etc.
+		content: typeof msg.content === 'string'
+			? msg.content.length
+			: Array.isArray(msg.content)
+				? msg.content.reduce((total: number, part: any) => {
+					if (typeof part === 'string') return total + part.length;
+					if (part.type === 'text') return total + (part.text?.length || 0);
+					return total;
+				}, 0)
+				: 0,
+		copilot_message_type: messageType,
+	}));
+
+	// Log the messages before sending to telemetry
+	logService?.info(`[TELEMETRY] engine.messages.length (${messageType}): ${JSON.stringify(messagesWithLength, null, 2)}`);
+
+	const telemetryDataWithPrompt = telemetryData.extendedBy({
+		messagesJson: JSON.stringify(messagesWithLength),
+		message_direction: messageType,
+	});
+
+	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+}
+
+export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, logService?: ILogService) {
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messages),
 	});
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+
+	// Also send length-only telemetry
+	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, logService);
 }
 
 export function prepareChatCompletionForReturn(
@@ -46,7 +81,7 @@ export function prepareChatCompletionForReturn(
 		content: toTextParts(messageContent),
 	};
 
-	sendEngineMessagesTelemetry(telemetryService, [rawMessageToCAPI(message)], telemetryData);
+	sendEngineMessagesTelemetry(telemetryService, [rawMessageToCAPI(message)], telemetryData, logService);
 	return {
 		message: message,
 		choiceIndex: c.index,
