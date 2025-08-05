@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
-import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { toTextParts } from '../../chat/common/globalStringUtils';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, multiplexProperties } from '../../telemetry/common/telemetry';
@@ -18,13 +17,12 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 	const isOutput = messages.length === 1 && messages[0].role === 'assistant';
 	const messageType = isOutput ? 'output' : 'input';
 
-	// Generate or reuse a unique model call ID
-	let modelCallId = telemetryData.properties.modelCallId as string;
+	// Get the unique model call ID - it should already be set in the base telemetryData
+	const modelCallId = telemetryData.properties.modelCallId as string;
 	if (!modelCallId) {
-		// Generate a new unique ID for this model call
-		modelCallId = generateUuid();
-		// Store it in telemetry data for reuse in output messages
-		telemetryData.properties.modelCallId = modelCallId;
+		// This shouldn't happen if the ID was properly generated at request start
+		logService?.warn('[TELEMETRY] modelCallId not found in telemetryData, input/output messages cannot be linked');
+		return;
 	}
 
 	// Create messages with content and tool_calls arguments replaced by length
@@ -45,12 +43,6 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 		// Add the unique model call ID to link input/output messages
 		processedMsg.modelCallId = modelCallId;
 
-		// Also include completionId if available (for output messages)
-		const completionId = telemetryData.properties.completionId;
-		if (completionId) {
-			processedMsg.completionId = completionId;
-		}
-
 		// Process tool_calls if present
 		if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
 			processedMsg.tool_calls = msg.tool_calls.map((toolCall: any) => ({
@@ -67,8 +59,13 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 		return processedMsg;
 	});
 
-	// Log the messages before sending to telemetry
-	logService?.info(`[TELEMETRY] engine.messages.length (${messageType}): ${JSON.stringify(messagesWithLength, null, 2)}`);
+	// Log the messages before sending to telemetry with modelCallId as top-level property
+	const logData = {
+		modelCallId: modelCallId,
+		messageType: messageType,
+		messages: messagesWithLength
+	};
+	logService?.info(`[TELEMETRY] engine.messages.length: ${JSON.stringify(logData, null, 2)}`);
 
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messagesWithLength),
@@ -125,7 +122,7 @@ export function prepareChatCompletionForReturn(
 		(telemetryMessage as any).usage = c.usage;
 	}
 
-	// Ensure completionId is available in telemetry data
+	// Add request metadata to telemetry data
 	telemetryData.extendWithRequestId(c.requestId);
 
 	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryData, logService);

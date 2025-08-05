@@ -6,6 +6,7 @@
 import { ClientHttp2Stream } from 'http2';
 import type { CancellationToken } from 'vscode';
 import { createRequestHMAC } from '../../../util/common/crypto';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IAuthenticationService } from '../../authentication/common/authentication';
 import { IntentParams } from '../../chat/common/chatMLFetcher';
 import { IChatQuotaService } from '../../chat/common/chatQuotaService';
@@ -497,6 +498,7 @@ async function fetchWithInstrumentation(
 		endpoint: 'completions',
 		engineName: 'chat',
 		uiKind: ChatLocation.toString(location),
+		modelCallId: generateUuid(), // Generate unique ID to link input and output messages
 		...telemetryProperties
 	}, {
 		maxTokenWindow: chatEndpoint.modelMaxPromptTokens
