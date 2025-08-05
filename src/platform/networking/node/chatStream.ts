@@ -40,9 +40,6 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 					: 0,
 		};
 
-		// Add the unique model call ID to link input/output messages
-		processedMsg.modelCallId = modelCallId;
-
 		// Process tool_calls if present
 		if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
 			processedMsg.tool_calls = msg.tool_calls.map((toolCall: any) => ({
