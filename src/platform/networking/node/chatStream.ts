@@ -17,20 +17,37 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 	const isOutput = messages.length === 1 && messages[0].role === 'assistant';
 	const messageType = isOutput ? 'output' : 'input';
 
-	// Create messages with content replaced by length
-	const messagesWithLength = messages.map(msg => ({
-		...msg, // This preserves ALL existing fields including tool_calls, tool_call_id, copilot_references, etc.
-		content: typeof msg.content === 'string'
-			? msg.content.length
-			: Array.isArray(msg.content)
-				? msg.content.reduce((total: number, part: any) => {
-					if (typeof part === 'string') return total + part.length;
-					if (part.type === 'text') return total + (part.text?.length || 0);
-					return total;
-				}, 0)
-				: 0,
-		copilot_message_type: messageType,
-	}));
+	// Create messages with content and tool_calls arguments replaced by length
+	const messagesWithLength = messages.map(msg => {
+		const processedMsg: any = {
+			...msg, // This preserves ALL existing fields including tool_calls, tool_call_id, copilot_references, etc.
+			content: typeof msg.content === 'string'
+				? msg.content.length
+				: Array.isArray(msg.content)
+					? msg.content.reduce((total: number, part: any) => {
+						if (typeof part === 'string') return total + part.length;
+						if (part.type === 'text') return total + (part.text?.length || 0);
+						return total;
+					}, 0)
+					: 0,
+			copilot_message_type: messageType,
+		};
+
+		// Process tool_calls if present
+		if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
+			processedMsg.tool_calls = msg.tool_calls.map((toolCall: any) => ({
+				...toolCall,
+				function: toolCall.function ? {
+					...toolCall.function,
+					arguments: typeof toolCall.function.arguments === 'string'
+						? toolCall.function.arguments.length
+						: toolCall.function.arguments
+				} : toolCall.function
+			}));
+		}
+
+		return processedMsg;
+	});
 
 	// Log the messages before sending to telemetry
 	logService?.info(`[TELEMETRY] engine.messages.length (${messageType}): ${JSON.stringify(messagesWithLength, null, 2)}`);
