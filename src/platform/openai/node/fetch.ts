@@ -150,6 +150,9 @@ export async function fetchAndStreamChat(
 		};
 	}
 
+	// Generate unique ID to link input and output messages
+	const modelCallId = generateUuid();
+
 	const response = await fetchWithInstrumentation(
 		logService,
 		telemetryService,
@@ -165,7 +168,7 @@ export async function fetchAndStreamChat(
 		params.location,
 		userInitiatedRequest,
 		cancel,
-		telemetryProperties);
+		{ ...telemetryProperties, modelCallId });
 
 	if (cancel?.isCancellationRequested) {
 		const body = await response!.body();
@@ -191,13 +194,17 @@ export async function fetchAndStreamChat(
 	}
 
 	const nChoices = params.postOptions?.n ?? /* OpenAI's default */ 1;
+
+	// Extend baseTelemetryData with modelCallId for output messages
+	const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
+
 	const chatCompletions = await chatEndpointInfo.processResponseFromChatEndpoint(
 		telemetryService,
 		logService,
 		response,
 		nChoices,
 		finishedCb,
-		baseTelemetryData,
+		extendedBaseTelemetryData,
 		cancel
 	);
 
@@ -498,8 +505,7 @@ async function fetchWithInstrumentation(
 		endpoint: 'completions',
 		engineName: 'chat',
 		uiKind: ChatLocation.toString(location),
-		modelCallId: generateUuid(), // Generate unique ID to link input and output messages
-		...telemetryProperties
+		...telemetryProperties // This includes the modelCallId from fetchAndStreamChat
 	}, {
 		maxTokenWindow: chatEndpoint.modelMaxPromptTokens
 	});
