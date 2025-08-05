@@ -33,6 +33,12 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 			copilot_message_type: messageType,
 		};
 
+		// Add completionId to connect input/output messages
+		const modelCallId = telemetryData.properties.completionId;
+		if (modelCallId) {
+			processedMsg.completionId = modelCallId;
+		}
+
 		// Process tool_calls if present
 		if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
 			processedMsg.tool_calls = msg.tool_calls.map((toolCall: any) => ({
@@ -98,7 +104,20 @@ export function prepareChatCompletionForReturn(
 		content: toTextParts(messageContent),
 	};
 
-	sendEngineMessagesTelemetry(telemetryService, [rawMessageToCAPI(message)], telemetryData, logService);
+	// Create enhanced message for telemetry with usage and token information
+	const telemetryMessage = rawMessageToCAPI(message);
+
+	// Add usage information if available
+	if (c.usage) {
+		(telemetryMessage as any).usage = c.usage;
+	}
+
+	// Add token information if available
+	if (jsonData.tokens) {
+		(telemetryMessage as any).tokens = jsonData.tokens;
+	}
+
+	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryData, logService);
 	return {
 		message: message,
 		choiceIndex: c.index,
