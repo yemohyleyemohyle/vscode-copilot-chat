@@ -30,7 +30,6 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 						return total;
 					}, 0)
 					: 0,
-			copilot_message_type: messageType,
 		};
 
 		// Add completionId to connect input/output messages
@@ -104,7 +103,7 @@ export function prepareChatCompletionForReturn(
 		content: toTextParts(messageContent),
 	};
 
-	// Create enhanced message for telemetry with usage and token information
+	// Create enhanced message for telemetry with usage information
 	const telemetryMessage = rawMessageToCAPI(message);
 
 	// Add usage information if available
@@ -112,10 +111,8 @@ export function prepareChatCompletionForReturn(
 		(telemetryMessage as any).usage = c.usage;
 	}
 
-	// Add token information if available
-	if (jsonData.tokens) {
-		(telemetryMessage as any).tokens = jsonData.tokens;
-	}
+	// Ensure completionId is available in telemetry data
+	telemetryData.extendWithRequestId(c.requestId);
 
 	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryData, logService);
 	return {
