@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { toTextParts } from '../../chat/common/globalStringUtils';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, multiplexProperties } from '../../telemetry/common/telemetry';
@@ -16,6 +17,15 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 	// Determine if this is input or output based on message characteristics
 	const isOutput = messages.length === 1 && messages[0].role === 'assistant';
 	const messageType = isOutput ? 'output' : 'input';
+
+	// Generate or reuse a unique model call ID
+	let modelCallId = telemetryData.properties.modelCallId as string;
+	if (!modelCallId) {
+		// Generate a new unique ID for this model call
+		modelCallId = generateUuid();
+		// Store it in telemetry data for reuse in output messages
+		telemetryData.properties.modelCallId = modelCallId;
+	}
 
 	// Create messages with content and tool_calls arguments replaced by length
 	const messagesWithLength = messages.map(msg => {
@@ -32,10 +42,13 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 					: 0,
 		};
 
-		// Add completionId to connect input/output messages
-		const modelCallId = telemetryData.properties.completionId;
-		if (modelCallId) {
-			processedMsg.completionId = modelCallId;
+		// Add the unique model call ID to link input/output messages
+		processedMsg.modelCallId = modelCallId;
+
+		// Also include completionId if available (for output messages)
+		const completionId = telemetryData.properties.completionId;
+		if (completionId) {
+			processedMsg.completionId = completionId;
 		}
 
 		// Process tool_calls if present
@@ -60,6 +73,7 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messagesWithLength),
 		message_direction: messageType,
+		modelCallId: modelCallId, // Include at telemetry event level too
 	});
 
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
