@@ -33,8 +33,12 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 				? msg.content.length
 				: Array.isArray(msg.content)
 					? msg.content.reduce((total: number, part: any) => {
-						if (typeof part === 'string') return total + part.length;
-						if (part.type === 'text') return total + (part.text?.length || 0);
+						if (typeof part === 'string') {
+							return total + part.length;
+						}
+						if (part.type === 'text') {
+							return total + (part.text?.length || 0);
+						}
 						return total;
 					}, 0)
 					: 0,
