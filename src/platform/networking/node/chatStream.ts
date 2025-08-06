@@ -116,15 +116,20 @@ export function prepareChatCompletionForReturn(
 	// Create enhanced message for telemetry with usage information
 	const telemetryMessage = rawMessageToCAPI(message);
 
-	// Add usage information if available
-	if (c.usage) {
-		(telemetryMessage as any).usage = c.usage;
-	}
-
 	// Add request metadata to telemetry data
 	telemetryData.extendWithRequestId(c.requestId);
 
-	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryData, true, logService);
+	// Add usage information to telemetryData if available
+	let telemetryDataWithUsage = telemetryData;
+	if (c.usage) {
+		telemetryDataWithUsage = telemetryData.extendedBy({}, {
+			promptTokens: c.usage.prompt_tokens,
+			completionTokens: c.usage.completion_tokens,
+			totalTokens: c.usage.total_tokens
+		});
+	}
+
+	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryDataWithUsage, true, logService);
 	return {
 		message: message,
 		choiceIndex: c.index,
@@ -135,6 +140,6 @@ export function prepareChatCompletionForReturn(
 		error: c.error,
 		tokens: jsonData.tokens,
 		usage: c.usage,
-		telemetryData: telemetryData,
+		telemetryData: telemetryDataWithUsage,
 	};
 }
