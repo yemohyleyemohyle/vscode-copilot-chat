@@ -41,7 +41,7 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 		};
 
 		// Process tool_calls if present
-		if (msg.tool_calls && Array.isArray(msg.tool_calls)) {
+		if ('tool_calls' in msg && msg.tool_calls && Array.isArray(msg.tool_calls)) {
 			processedMsg.tool_calls = msg.tool_calls.map((toolCall: any) => ({
 				...toolCall,
 				function: toolCall.function ? {
