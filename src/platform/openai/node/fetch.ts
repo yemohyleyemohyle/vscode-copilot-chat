@@ -183,8 +183,6 @@ export async function fetchAndStreamChat(
 		return handleError(logService, telemetryService, authenticationService, telemetryData, response, ourRequestId);
 	}
 
-	const nChoices = params.postOptions?.n ?? /* OpenAI's default */ 1;
-
 	// Extend baseTelemetryData with modelCallId for output messages
 	const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
 
@@ -192,7 +190,7 @@ export async function fetchAndStreamChat(
 		telemetryService,
 		logService,
 		response,
-		nChoices ?? /* OpenAI's default */  1,
+		nChoices ?? /* OpenAI's default */ 1,
 		finishedCb,
 		extendedBaseTelemetryData,
 		cancel
