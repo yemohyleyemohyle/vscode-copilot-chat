@@ -64,7 +64,7 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 		messageType: messageType,
 		messages: messagesWithLength
 	};
-	logService?.info(`[TELEMETRY] engine.messages.length: ${JSON.stringify(logData, null, 2)}`);
+	logService?.debug(`[TELEMETRY] engine.messages.length: ${JSON.stringify(logData, null, 2)}`);
 
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messagesWithLength),
