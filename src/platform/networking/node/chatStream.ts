@@ -12,9 +12,7 @@ import { APIJsonData, CAPIChatMessage, ChatCompletion, rawMessageToCAPI } from '
 import { FinishedCompletion, convertToAPIJsonData } from './stream';
 
 // TODO @lramos15 - Find a better file for this, since this file is for the chat stream and should not be telemetry related
-export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, logService?: ILogService) {
-	// Determine if this is input or output based on message characteristics
-	const isOutput = messages.length === 1 && messages[0].role === 'assistant';
+export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
 	const messageType = isOutput ? 'output' : 'input';
 
 	// Get the unique model call ID - it should already be set in the base telemetryData
@@ -78,7 +76,7 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 }
 
-export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, logService?: ILogService) {
+export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messages),
 	});
@@ -86,7 +84,7 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 
 	// Also send length-only telemetry
-	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, logService);
+	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, isOutput, logService);
 }
 
 export function prepareChatCompletionForReturn(
@@ -126,7 +124,7 @@ export function prepareChatCompletionForReturn(
 	// Add request metadata to telemetry data
 	telemetryData.extendWithRequestId(c.requestId);
 
-	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryData, logService);
+	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryData, true, logService);
 	return {
 		message: message,
 		choiceIndex: c.index,
