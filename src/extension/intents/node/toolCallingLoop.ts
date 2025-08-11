@@ -11,7 +11,8 @@ import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { ILogService } from '../../../platform/log/common/logService';
-import { FinishedCallback, OpenAiFunctionDef, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
+import { OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
+import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { IThinkingDataService } from '../../../platform/thinking/node/thinkingDataService';
@@ -23,7 +24,7 @@ import { Mutable } from '../../../util/vs/base/common/types';
 import { URI } from '../../../util/vs/base/common/uri';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { IInstantiationService } from '../../../util/vs/platform/instantiation/common/instantiation';
-import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelToolResult2, MarkdownString, ToolResultAudience } from '../../../vscodeTypes';
+import { ChatResponsePullRequestPart, LanguageModelDataPart2, LanguageModelPartAudience, LanguageModelToolResult2, MarkdownString } from '../../../vscodeTypes';
 import { InteractionOutcomeComputer } from '../../inlineChat/node/promptCraftingTypes';
 import { ChatVariablesCollection } from '../../prompt/common/chatVariablesCollection';
 import { Conversation, IResultMetadata, ResponseStreamParticipant, TurnStatus } from '../../prompt/common/conversation';
@@ -81,6 +82,8 @@ export interface IToolCallingBuiltPromptEvent {
 	tools: LanguageModelToolInformation[];
 }
 
+export type ToolCallingLoopFetchOptions = Required<Pick<IMakeChatRequestOptions, 'messages' | 'finishedCb' | 'requestOptions' | 'userInitiatedRequest'>>;
+
 /**
  * This is a base class that can be used to implement a tool calling loop
  * against a model. It requires only that you build a prompt and is decoupled
@@ -131,11 +134,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const query = isContinuation ?
 			'Please continue' :
 			this.turn.request.message;
+		// exclude turns from the history that errored due to prompt filtration
+		const history = this.options.conversation.turns.slice(0, -1).filter(turn => turn.responseStatus !== TurnStatus.PromptFiltered);
 
 		return {
 			requestId: this.turn.id,
 			query,
-			history: this.options.conversation.turns.slice(0, -1),
+			history,
 			toolCallResults: this.toolCallResults,
 			toolCallRounds: this.toolCallRounds,
 			editedFileEvents: this.options.request.editedFileEvents,
@@ -154,10 +159,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	protected abstract fetch(
-		messages: Raw.ChatMessage[],
-		finishedCb: FinishedCallback,
-		requestOptions: OptionalChatRequestParams,
-		firstFetchCall: boolean,
+		options: ToolCallingLoopFetchOptions,
 		token: CancellationToken
 	): Promise<ChatResponse>;
 
@@ -170,6 +172,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	public async run(outputStream: ChatResponseStream | undefined, token: CancellationToken | PauseController): Promise<IToolCallLoopResult> {
 		let i = 0;
 		let lastResult: IToolCallSingleResult | undefined;
+		let lastRequestMessagesStartingIndexForRun: number | undefined;
 
 		while (true) {
 			if (lastResult && i++ >= this.options.toolCallLimit) {
@@ -179,6 +182,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 
 			try {
 				const result = await this.runOne(outputStream, i, token);
+				if (lastRequestMessagesStartingIndexForRun === undefined) {
+					lastRequestMessagesStartingIndexForRun = result.lastRequestMessages.length - 1;
+				}
 				lastResult = {
 					...result,
 					hadIgnoredFiles: lastResult?.hadIgnoredFiles || result.hadIgnoredFiles
@@ -203,10 +209,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			this._logService.error('Error emitting read file trajectories', err);
 		});
 
-		for (const result of Object.keys(this.toolCallResults)) {
-			if (this.toolCallResults[result] instanceof LanguageModelToolResult2) {
-				for (const part of this.toolCallResults[result].content) {
-					if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(ToolResultAudience.User)) {
+		const toolCallRoundsToDisplay = lastResult.lastRequestMessages.slice(lastRequestMessagesStartingIndexForRun ?? 0).filter((m): m is Raw.ToolChatMessage => m.role === Raw.ChatRole.Tool);
+		for (const toolRound of toolCallRoundsToDisplay) {
+			const result = this.toolCallResults[toolRound.toolCallId];
+			if (result instanceof LanguageModelToolResult2) {
+				for (const part of result.content) {
+					if (part instanceof LanguageModelDataPart2 && part.mimeType === 'application/pull-request+json' && part.audience?.includes(LanguageModelPartAudience.User)) {
 						const data: { uri: string; title: string; description: string; author: string; linkTag: string } = JSON.parse(part.data.toString());
 						outputStream?.push(new ChatResponsePullRequestPart(URI.parse(data.uri), data.title, data.description, data.author, data.linkTag));
 					}
@@ -422,11 +430,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 				parameters: toolInfo.inputSchema,
 			} satisfies OpenAiFunctionDef;
 		}) : undefined;
+		let statefulMarker: string | undefined;
 		const toolCalls: IToolCall[] = [];
-		const fixedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
-		const fetchResult = await this.fetch(
-			fixedMessages,
-			async (text, _, delta) => {
+		const fetchResult = await this.fetch({
+			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
+			finishedCb: async (text, _, delta) => {
 				fetchStreamSource?.update(text, delta);
 				if (delta.copilotToolCalls) {
 					toolCalls.push(...delta.copilotToolCalls.map((call): IToolCall => ({
@@ -435,10 +443,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						arguments: call.arguments === '' ? '{}' : call.arguments
 					})));
 				}
+				if (delta.statefulMarker) {
+					statefulMarker = delta.statefulMarker;
+				}
 
 				return stopEarly ? text.length : undefined;
 			},
-			{
+			requestOptions: {
 				tools: promptContextTools?.map(tool => ({
 					function: {
 						name: tool.name,
@@ -448,9 +459,8 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					type: 'function',
 				})),
 			},
-			iterationNumber === 0 && !isContinuation,
-			token,
-		);
+			userInitiatedRequest: iterationNumber === 0 && !isContinuation
+		}, token);
 
 		fetchStreamSource?.resolve();
 		const chatResult = await processResponsePromise ?? undefined;
@@ -478,6 +488,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					toolCalls,
 					toolInputRetry,
 					undefined,
+					statefulMarker
 				),
 				chatResult,
 				hadIgnoredFiles: buildPromptResult.hasIgnoredFiles,
