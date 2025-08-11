@@ -312,6 +312,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 					<>
 						Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
 						Use the {ToolName.ReplaceString} tool to edit files, paying attention to context to ensure your replacement is unique. You can use this tool multiple times per file.<br />
+						Use the {ToolName.MultiReplaceString} tool to make edits simultaneously.<br />
 						Use the {ToolName.EditFile} tool to insert code into a file ONLY if {ToolName.ReplaceString} has failed.<br />
 						When editing files, group your changes by file.<br />
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
@@ -551,7 +552,8 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 			</Tag>}
 			{hasEditFileTool && <Tag name='editFileInstructions'>
 				Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
-				Use the {ToolName.ReplaceString} tool to make edits in the file in string replacement way, but only if you are sure that the string is unique enough to not cause any issues. You can use this tool multiple times per file.<br />
+				Use the {ToolName.ReplaceString} tool to make single edits in the file in string replacement way, but only if you are sure that the string is unique enough to not cause any issues. You can use this tool multiple times per file.<br />
+				Use {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation.<br />
 				Use the {ToolName.EditFile} tool to insert code into a file.<br />
 				When editing files, group your changes by file.<br />
 				NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />

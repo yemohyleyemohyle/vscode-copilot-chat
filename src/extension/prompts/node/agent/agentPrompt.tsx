@@ -640,7 +640,7 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 	}
 	if (hasEditFileTool && hasReplaceStringTool) {
 		if (useStrongReplaceStringHint) {
-			lines.push(<>You must always try making file edits using {ToolName.ReplaceString} tool. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
+			lines.push(<>You must always try making file edits using {ToolName.ReplaceString} or {ToolName.MultiReplaceString} tools. NEVER use {ToolName.EditFile} unless told to by the user or by a tool.</>);
 		} else {
 			lines.push(<>It is much faster to edit using the {ToolName.ReplaceString} tool. Prefer {ToolName.ReplaceString} for making edits and only fall back to {ToolName.EditFile} if it fails.</>);
 		}
