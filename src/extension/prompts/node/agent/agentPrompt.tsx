@@ -635,6 +635,7 @@ export function getEditingReminder(hasEditFileTool: boolean, hasReplaceStringToo
 	}
 	if (hasReplaceStringTool) {
 		lines.push(<>When using the {ToolName.ReplaceString} tool, include 3-5 lines of unchanged code before and after the string you want to replace, to make it unambiguous which part of the file should be edited.<br /></>);
+		lines.push(<>When using the {ToolName.ReplaceString} tool, perform all the disjoint edits in parallel. For example, if you need to add a new functionality and also a corresponding test case, do both edits in parallel.<br /></>);
 	}
 	if (hasEditFileTool && hasReplaceStringTool) {
 		if (useStrongReplaceStringHint) {

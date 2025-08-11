@@ -321,7 +321,7 @@ export class AlternateGPTPrompt extends PromptElement<DefaultAgentPromptProps> {
 						{isGpt5 && <>Make the smallest set of edits needed and avoid reformatting or moving unrelated code. Preserve existing style and conventions, and keep imports, exports, and public APIs stable unless the task requires changes. Prefer completing all edits for a file within a single message when practical.<br /></>}
 						NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
 						NEVER print a codeblock that represents a change to a file, use {ToolName.ReplaceString} instead.<br />
-						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} tool. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
+						For each file, give a short description of what needs to be changed, then use the {ToolName.ReplaceString} tool. For the multiple disjoint edits use the {ToolName.ReplaceString} tool in parallel. You can use any tool multiple times in a response, and you can keep writing text after using a tool.<br />
 					</>}
 				<GenericEditingTips {...this.props} />
 				The {ToolName.EditFile} tool is very smart and can understand how to apply your edits to the user's files, you just need to provide minimal hints.<br />
