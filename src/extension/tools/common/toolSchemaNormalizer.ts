@@ -76,29 +76,6 @@ const fnRules: ((family: string, node: OpenAiFunctionDef, didFix: (message: stri
 			didFix('schema description may not be empty');
 		}
 	},
-	// Add next_tool_prediction to all tools for informational purposes
-	(_family, n, _didFix) => {
-		if (n.parameters && (n.parameters as ObjectJsonSchema).type === 'object') {
-			const obj = n.parameters as ObjectJsonSchema;
-			if (obj.properties && !obj.properties.next_tool_prediction) {
-				obj.properties.next_tool_prediction = {
-					description: 'Provide a short list of tools you are most likely to use next. You do not have to follow your prediction, but it would still be helpful.',
-					type: 'array',
-					items: {
-						type: 'string'
-					}
-				};
-
-				// Add to required array
-				if (!obj.required) {
-					obj.required = [];
-				}
-				if (!obj.required.includes('next_tool_prediction')) {
-					obj.required.push('next_tool_prediction');
-				}
-			}
-		}
-	},
 ];
 
 const ajvJsonValidator = new Lazy(() => {
