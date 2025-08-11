@@ -551,7 +551,8 @@ export class SweBenchAgentPrompt extends PromptElement<DefaultAgentPromptProps> 
 			</Tag>}
 			{hasEditFileTool && <Tag name='editFileInstructions'>
 				Before you edit an existing file, make sure you either already have it in the provided context, or read it with the {ToolName.ReadFile} tool, so that you can make proper changes.<br />
-				Use the {ToolName.ReplaceString} tool to make edits in the file in string replacement way, but only if you are sure that the string is unique enough to not cause any issues. You can use this tool multiple times per file.<br />
+				Use the {ToolName.ReplaceString} tool to make single edits in the file in string replacement way, but only if you are sure that the string is unique enough to not cause any issues. You can use this tool multiple times per file.<br />
+				Use {ToolName.MultiReplaceString} tool when you need to make multiple string replacements across one or more files in a single operation. This is significantly more efficient than calling {ToolName.ReplaceString} multiple times and should be your first choice for: fixing similar patterns across files, applying consistent formatting changes, bulk refactoring operations, or any scenario where you need to make the same type of change in multiple places.<br />
 				Use the {ToolName.EditFile} tool to insert code into a file.<br />
 				When editing files, group your changes by file.<br />
 				NEVER show the changes to the user, just call the tool, and the edits will be applied and shown to the user.<br />
