@@ -19,6 +19,7 @@ import { KeepGoingReminder } from './agentPrompt';
 interface ToolCapabilities {
 	hasTerminalTool: boolean;
 	hasReplaceStringTool: boolean;
+	hasMultiReplaceStringTool: boolean;
 	hasInsertEditTool: boolean;
 	hasApplyPatchTool: boolean;
 	hasReadFileTool: boolean;
@@ -36,6 +37,7 @@ function detectToolCapabilities(availableTools: readonly LanguageModelToolInform
 	return {
 		hasTerminalTool: !!availableTools?.find(tool => tool.name === ToolName.CoreRunInTerminal) || !!toolsService?.getTool(ToolName.CoreRunInTerminal),
 		hasReplaceStringTool: !!availableTools?.find(tool => tool.name === ToolName.ReplaceString),
+		hasMultiReplaceStringTool: !!availableTools?.find(tool => tool.name === ToolName.MultiReplaceString),
 		hasInsertEditTool: !!availableTools?.find(tool => tool.name === ToolName.EditFile),
 		hasApplyPatchTool: !!availableTools?.find(tool => tool.name === ToolName.ApplyPatch),
 		hasReadFileTool: !!availableTools?.find(tool => tool.name === ToolName.ReadFile),
