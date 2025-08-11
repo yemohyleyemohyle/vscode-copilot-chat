@@ -62,8 +62,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		const allowTools: Record<string, boolean> = {};
 		allowTools[ToolName.EditFile] = true;
 		allowTools[ToolName.ReplaceString] = modelSupportsReplaceString(model) || !!(model.family.includes('gemini') && configurationService.getExperimentBasedConfig(ConfigKey.Internal.GeminiReplaceString, experimentationService));
-		allowTools[ToolName.MultiReplaceString] = modelSupportsReplaceString(model) || !!(model.family.includes('gemini') && configurationService.getExperimentBasedConfig(ConfigKey.Internal.GeminiReplaceString, experimentationService));
-		allowTools[ToolName.ApplyPatch] = modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
+		allowTools[ToolName.ApplyPatch] = await modelSupportsApplyPatch(model) && !!toolsService.getTool(ToolName.ApplyPatch);
 
 		if (modelCanUseReplaceStringExclusively(model)) {
 			allowTools[ToolName.ReplaceString] = true;
@@ -72,7 +71,7 @@ const getTools = (instaService: IInstantiationService, request: vscode.ChatReque
 		}
 
 		allowTools[ToolName.RunTests] = await testService.hasAnyTests();
-		allowTools[ToolName.CoreCreateAndRunTask] = !!(configurationService.getConfig(ConfigKey.AgentCanRunTasks) && tasksService.getTasks().length);
+		allowTools[ToolName.CoreRunTask] = !!(configurationService.getConfig(ConfigKey.AgentCanRunTasks) && tasksService.getTasks().length);
 
 		return toolsService.getEnabledTools(request, tool => {
 			if (typeof allowTools[tool.name] === 'boolean') {
@@ -97,8 +96,6 @@ export class AgentIntent extends EditCodeIntent {
 		@IExperimentationService expService: IExperimentationService,
 		@ICodeMapperService codeMapperService: ICodeMapperService,
 		@IWorkspaceService workspaceService: IWorkspaceService,
-		@IConfigurationService private readonly _configurationService: IConfigurationService,
-		@IExperimentationService private readonly _experimentationService: IExperimentationService,
 		@IToolGroupingService private readonly _toolGroupingService: IToolGroupingService,
 	) {
 		super(instantiationService, endpointProvider, configurationService, expService, codeMapperService, workspaceService, { intentInvocation: AgentIntentInvocation, processCodeblocks: false });
@@ -106,16 +103,17 @@ export class AgentIntent extends EditCodeIntent {
 
 	override async handleRequest(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken, documentContext: IDocumentContext | undefined, agentName: string, location: ChatLocation, chatTelemetry: ChatTelemetryBuilder, onPaused: Event<boolean>): Promise<vscode.ChatResult> {
 		if (request.command === 'list') {
-			await this.listTools(request, stream, token);
+			await this.listTools(conversation, request, stream, token);
 			return {};
 		}
 
 		return super.handleRequest(conversation, request, stream, token, documentContext, agentName, location, chatTelemetry, onPaused);
 	}
 
-	private async listTools(request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
+	private async listTools(conversation: Conversation, request: vscode.ChatRequest, stream: vscode.ChatResponseStream, token: CancellationToken) {
 		const editingTools = await getTools(this.instantiationService, request);
-		if (!this._configurationService.getExperimentBasedConfig(ConfigKey.VirtualTools, this._experimentationService)) {
+		const grouping = this._toolGroupingService.create(conversation.sessionId, editingTools);
+		if (!grouping.isEnabled) {
 			stream.markdown(`Available tools: \n${editingTools.map(tool => `- ${tool.name}`).join('\n')}\n`);
 			return;
 		}
@@ -139,7 +137,7 @@ export class AgentIntent extends EditCodeIntent {
 			}
 		}
 
-		const tools = await this._toolGroupingService.create(editingTools).computeAll(token);
+		const tools = await grouping.computeAll(token);
 		tools.forEach(t => printTool(t));
 		stream.markdown(str);
 
@@ -161,9 +159,7 @@ export class AgentIntent extends EditCodeIntent {
 export class AgentIntentInvocation extends EditCodeIntentInvocation {
 
 	public override get linkification(): IntentLinkificationOptions {
-		// on by default:
-		const enabled = this.configurationService.getConfig(ConfigKey.Internal.EditLinkification) !== false;
-		return { disable: !enabled };
+		return { disable: false };
 	}
 
 	public override readonly codeblocksRepresentEdits = false;
@@ -223,7 +219,10 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 			this.configurationService.getConfig<number | undefined>(ConfigKey.Internal.SummarizeAgentConversationHistoryThreshold) ?? this.endpoint.modelMaxPromptTokens,
 			this.endpoint.modelMaxPromptTokens
 		);
-		const safeBudget = Math.floor((baseBudget - toolTokens) * 0.85);
+		const useTruncation = this.configurationService.getConfig(ConfigKey.Internal.UseResponsesApiTruncation);
+		const safeBudget = useTruncation ?
+			Number.MAX_SAFE_INTEGER :
+			Math.floor((baseBudget - toolTokens) * 0.85);
 		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
 		const summarizationEnabled = this.configurationService.getExperimentBasedConfig(ConfigKey.SummarizeAgentConversationHistory, this.experimentationService) && this.prompt === AgentPrompt;
 		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
@@ -322,9 +321,11 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation {
 	}
 
 	modifyErrorDetails(errorDetails: vscode.ChatErrorDetails, response: ChatResponse): vscode.ChatErrorDetails {
-		errorDetails.confirmationButtons = [
-			{ data: { copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation, label: l10n.t('Try Again') },
-		];
+		if (!errorDetails.responseIsFiltered) {
+			errorDetails.confirmationButtons = [
+				{ data: { copilotContinueOnError: true } satisfies IContinueOnErrorConfirmation, label: l10n.t('Try Again') },
+			];
+		}
 		return errorDetails;
 	}
 

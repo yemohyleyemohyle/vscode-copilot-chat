@@ -4,22 +4,23 @@
  *--------------------------------------------------------------------------------------------*/
 
 import Anthropic from '@anthropic-ai/sdk';
-import { CancellationToken, ChatResponseFragment2, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatProvider2, LanguageModelChatRequestHandleOptions, LanguageModelTextPart, LanguageModelToolCallPart, Progress } from 'vscode';
+import { CancellationToken, ChatResponseFragment2, LanguageModelChatInformation, LanguageModelChatMessage, LanguageModelChatMessage2, LanguageModelChatRequestHandleOptions, LanguageModelTextPart, LanguageModelToolCallPart, Progress } from 'vscode';
 import { ChatFetchResponseType, ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OpenAiFunctionTool } from '../../../platform/networking/common/fetch';
-import { APIUsage, rawMessageToCAPI } from '../../../platform/networking/common/openai';
+import { APIUsage } from '../../../platform/networking/common/openai';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { RecordedProgress } from '../../../util/common/progressRecorder';
 import { toErrorMessage } from '../../../util/vs/base/common/errorMessage';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
-import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities } from '../common/byokProvider';
+import { BYOKAuthType, BYOKKnownModels, byokKnownModelsToAPIInfo, BYOKModelCapabilities, BYOKModelProvider } from '../common/byokProvider';
 import { anthropicMessagesToRawMessagesForLogging, apiMessageToAnthropicMessage } from './anthropicMessageConverter';
 import { IBYOKStorageService } from './byokStorageService';
 import { promptForAPIKey } from './byokUIService';
 
-export class AnthropicLMProvider implements LanguageModelChatProvider2<LanguageModelChatInformation> {
+export class AnthropicLMProvider implements BYOKModelProvider<LanguageModelChatInformation> {
 	public static readonly providerName = 'Anthropic';
+	public readonly authType: BYOKAuthType = BYOKAuthType.GlobalApiKey;
 	private _anthropicAPIClient: Anthropic | undefined;
 	private _apiKey: string | undefined;
 	constructor(
@@ -49,6 +50,13 @@ export class AnthropicLMProvider implements LanguageModelChatProvider2<LanguageM
 		}
 	}
 
+	async updateAPIKey(): Promise<void> {
+		this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName) !== undefined);
+		if (this._apiKey) {
+			this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
+		}
+	}
+
 	async prepareLanguageModelChat(options: { silent: boolean }, token: CancellationToken): Promise<LanguageModelChatInformation[]> {
 		if (!this._apiKey) { // If we don't have the API key it might just be in storage, so we try to read it first
 			this._apiKey = await this._byokStorageService.getAPIKey(AnthropicLMProvider.providerName);
@@ -59,9 +67,8 @@ export class AnthropicLMProvider implements LanguageModelChatProvider2<LanguageM
 			} else if (options.silent && !this._apiKey) {
 				return [];
 			} else { // Not silent, and no api key = good to prompt user for api key
-				this._apiKey = await promptForAPIKey(AnthropicLMProvider.providerName, false);
+				await this.updateAPIKey();
 				if (this._apiKey) {
-					this._byokStorageService.storeAPIKey(AnthropicLMProvider.providerName, this._apiKey, BYOKAuthType.GlobalApiKey);
 					return byokKnownModelsToAPIInfo(AnthropicLMProvider.providerName, await this.getAllModels(this._apiKey));
 				} else {
 					return [];
@@ -89,19 +96,17 @@ export class AnthropicLMProvider implements LanguageModelChatProvider2<LanguageM
 			},
 			{
 				model: model.id,
-				location: ChatLocation.Other,
-				messages: rawMessageToCAPI(anthropicMessagesToRawMessagesForLogging(convertedMessages, system)),
+				messages: anthropicMessagesToRawMessagesForLogging(convertedMessages, system),
 				ourRequestId: requestId,
-				postOptions: {
-					tools: options.tools?.map((tool): OpenAiFunctionTool => ({
-						type: 'function',
-						function: {
-							name: tool.name,
-							description: tool.description,
-							parameters: tool.inputSchema
-						}
-					}))
-				}
+				location: ChatLocation.Other,
+				tools: options.tools?.map((tool): OpenAiFunctionTool => ({
+					type: 'function',
+					function: {
+						name: tool.name,
+						description: tool.description,
+						parameters: tool.inputSchema
+					}
+				})),
 			});
 
 		const tools: Anthropic.Messages.Tool[] = (options.tools ?? []).map(tool => {
