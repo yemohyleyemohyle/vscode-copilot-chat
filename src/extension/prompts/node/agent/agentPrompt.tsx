@@ -364,7 +364,7 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 							{getEditingReminder(hasEditFileTool, hasReplaceStringTool, modelNeedsStrongReplaceStringHint(this.props.endpoint))}
 							<NotebookReminderInstructions chatVariables={this.props.chatVariables} query={this.props.request} />
 							{getExplanationReminder(this.props.endpoint.family, hasTodoTool)}
-              {hasMultiReplaceStringTool && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience.<br /></>}
+							{hasMultiReplaceStringTool && <>For maximum efficiency, whenever you plan to perform multiple independent edit operations, invoke them simultaneously using {ToolName.MultiReplaceString} tool rather than sequentially. This will greatly improve user's cost and time efficiency leading to a better user experience.<br /></>}
 						</Tag>
 					)}
 					{query && <Tag name='userRequest' priority={900} flexGrow={7}>{query + attachmentHint}</Tag>}
