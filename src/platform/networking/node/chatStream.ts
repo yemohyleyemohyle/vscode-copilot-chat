@@ -6,6 +6,7 @@
 import { Raw } from '@vscode/prompt-tsx';
 import { toTextParts } from '../../chat/common/globalStringUtils';
 import { ILogService } from '../../log/common/logService';
+import { IConversationTelemetryService } from '../../telemetry/common/conversationTelemetry';
 import { ITelemetryService, multiplexProperties } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { APIJsonData, CAPIChatMessage, ChatCompletion, rawMessageToCAPI } from '../common/openai';
@@ -68,7 +69,8 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 }
 
-export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
+export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService, conversationTelemetryService?: IConversationTelemetryService) {
+	// Keep existing telemetry intact
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messages),
 	});
@@ -77,13 +79,55 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 
 	// Also send length-only telemetry
 	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, isOutput, logService);
+
+	// NEW: Send individual message telemetry if service is available
+	if (conversationTelemetryService && messages.length > 0) {
+		const conversationId = telemetryData.properties.conversationId as string;
+		const headerRequestId = telemetryData.properties.headerRequestId as string;
+
+		if (conversationId && headerRequestId) {
+			messages.forEach((message, index) => {
+				const messageUuid = `${headerRequestId}_msg_${index}_${Date.now()}`;
+				const contentLength = typeof message.content === 'string'
+					? message.content.length
+					: Array.isArray(message.content)
+						? message.content.reduce((total: number, part: any) => {
+							if (typeof part === 'string') {
+								return total + part.length;
+							}
+							if (part.type === 'text') {
+								return total + (part.text?.length || 0);
+							}
+							return total;
+						}, 0)
+						: 0;
+
+				const hasToolCalls = 'tool_calls' in message && message.tool_calls;
+				const hasToolCallId = 'tool_call_id' in message && message.tool_call_id;
+				const contentType = hasToolCalls ? 'tool_call' :
+					hasToolCallId ? 'tool_result' :
+						'text';
+
+				conversationTelemetryService.sendMessageAdded(
+					conversationId,
+					headerRequestId,
+					messageUuid,
+					message.role,
+					contentType,
+					contentLength,
+					index
+				);
+			});
+		}
+	}
 }
 
 export function prepareChatCompletionForReturn(
 	telemetryService: ITelemetryService,
 	logService: ILogService,
 	c: FinishedCompletion,
-	telemetryData: TelemetryData
+	telemetryData: TelemetryData,
+	conversationTelemetryService?: IConversationTelemetryService
 ): ChatCompletion {
 	let messageContent = c.solution.text.join('');
 
@@ -121,7 +165,28 @@ export function prepareChatCompletionForReturn(
 		});
 	}
 
-	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryDataWithUsage, true, logService);
+	// NEW: Send API response telemetry if service is available
+	if (conversationTelemetryService && c.usage) {
+		const conversationId = telemetryDataWithUsage.properties.conversationId as string;
+		const headerRequestId = telemetryDataWithUsage.properties.headerRequestId as string;
+		const modelCallId = telemetryDataWithUsage.properties.modelCallId as string;
+
+		if (conversationId && headerRequestId && modelCallId) {
+			const responseTime = Date.now() - (c.requestId.created || Date.now());
+			conversationTelemetryService.sendApiResponse(
+				conversationId,
+				headerRequestId,
+				modelCallId,
+				c.usage.prompt_tokens,
+				c.usage.completion_tokens,
+				c.usage.total_tokens,
+				c.reason || 'unknown',
+				responseTime
+			);
+		}
+	}
+
+	sendEngineMessagesTelemetry(telemetryService, [telemetryMessage], telemetryDataWithUsage, true, logService, conversationTelemetryService);
 	return {
 		message: message,
 		choiceIndex: c.index,

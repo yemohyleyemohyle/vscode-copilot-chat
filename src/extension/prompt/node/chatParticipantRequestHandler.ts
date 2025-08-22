@@ -13,6 +13,7 @@ import { IIgnoreService } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { FilterReason } from '../../../platform/networking/common/openai';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
+import { IConversationTelemetryService } from '../../../platform/telemetry/common/conversationTelemetry';
 import { getWorkspaceFileDisplayPath, IWorkspaceService } from '../../../platform/workspace/common/workspaceService';
 import { ChatResponseStreamImpl } from '../../../util/common/chatResponseStreamImpl';
 import { fileTreePartToMarkdown } from '../../../util/common/fileTree';
@@ -82,6 +83,7 @@ export class ChatParticipantRequestHandler {
 		@ITabsAndEditorsService tabsAndEditorsService: ITabsAndEditorsService,
 		@ILogService private readonly _logService: ILogService,
 		@IAuthenticationChatUpgradeService private readonly _authenticationUpgradeService: IAuthenticationChatUpgradeService,
+		@IConversationTelemetryService private readonly _conversationTelemetryService: IConversationTelemetryService,
 	) {
 		this.location = this.getLocation(request);
 
@@ -117,6 +119,34 @@ export class ChatParticipantRequestHandler {
 			this.documentContext,
 			turns.length === 0,
 			this.request
+		);
+
+		// NEW: Send conversation.started telemetry for new conversations
+		if (turns.length === 0) {
+			const sessionType = this.location === ChatLocation.Panel ? 'chat' :
+				this.location === ChatLocation.Editor || this.location === ChatLocation.Notebook ? 'inline' :
+					'other';
+
+			this._conversationTelemetryService.sendConversationStarted(
+				actualSessionId,
+				this.chatTelemetry.telemetryMessageId, // Use messageId as headerRequestId
+				sessionType,
+				true // Always user initiated in this context
+			);
+		}
+
+		// NEW: Send query.started telemetry for all queries
+		const inputType = typeof request.prompt === 'string' ? 'text' : 'other';
+		const participantId = this.chatAgentArgs.agentId || undefined;
+		const slashCommand = request.command ? `/${request.command}` : undefined;
+
+		this._conversationTelemetryService.sendQueryStarted(
+			actualSessionId,
+			this.chatTelemetry.telemetryMessageId,
+			turns.length, // Query index based on existing turns
+			inputType,
+			participantId,
+			slashCommand
 		);
 
 		const latestTurn = new Turn(
@@ -273,6 +303,21 @@ export class ChatParticipantRequestHandler {
 					command: this.request.command
 				}
 			} satisfies ICopilotChatResult, true);
+
+			// NEW: Send query.completed telemetry
+			const totalDuration = Date.now() - this.chatTelemetry.baseUserTelemetry.properties.messageId.length; // Approximate duration
+			const completionType = result.errorDetails ? 'error' : 'success';
+			const messageCount = this.conversation.turns.length;
+
+			this._conversationTelemetryService.sendQueryCompleted(
+				this.conversation.sessionId,
+				this.chatTelemetry.telemetryMessageId,
+				completionType,
+				undefined, // userAction will be set later in userActions.ts
+				undefined, // editApplied will be set later if applicable
+				totalDuration,
+				messageCount
+			);
 
 			return <ICopilotChatResult>result;
 

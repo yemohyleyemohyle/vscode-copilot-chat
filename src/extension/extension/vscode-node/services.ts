@@ -52,6 +52,7 @@ import { ScopeSelectorImpl } from '../../../platform/scopeSelection/vscode-node/
 import { ISearchService } from '../../../platform/search/common/searchService';
 import { SearchServiceImpl } from '../../../platform/search/vscode-node/searchServiceImpl';
 import { ISettingsEditorSearchService } from '../../../platform/settingsEditor/common/settingsEditorSearchService';
+import { ConversationTelemetryService, IConversationTelemetryService } from '../../../platform/telemetry/common/conversationTelemetry';
 import { IExperimentationService, NullExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { NullTelemetryService } from '../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService, ITelemetryUserConfig, TelemetryUserConfigImpl } from '../../../platform/telemetry/common/telemetry';
@@ -122,6 +123,7 @@ export function registerServices(builder: IInstantiationServiceBuilder, extensio
 	builder.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	builder.define(IToolsService, new SyncDescriptor(ToolsService));
 	builder.define(IRequestLogger, new SyncDescriptor(RequestLogger));
+	builder.define(IConversationTelemetryService, new SyncDescriptor(ConversationTelemetryService));
 
 	builder.define(IFetcherService, new SyncDescriptor(FetcherService, [undefined]));
 	builder.define(IDomainService, new SyncDescriptor(DomainService));

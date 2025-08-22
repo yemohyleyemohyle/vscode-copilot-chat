@@ -12,6 +12,7 @@ import { ILanguageDiagnosticsService } from '../../../platform/languages/common/
 import { IMultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
+import { IConversationTelemetryService } from '../../../platform/telemetry/common/conversationTelemetry';
 import { ITelemetryService, TelemetryEventMeasurements, TelemetryEventProperties } from '../../../platform/telemetry/common/telemetry';
 import { isNotebookCellOrNotebookChatInput } from '../../../util/common/notebooks';
 import { createServiceIdentifier } from '../../../util/common/services';
@@ -45,7 +46,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 		@ISurveyService private readonly surveyService: ISurveyService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IMultiFileEditInternalTelemetryService private readonly multiFileEditTelemetryService: IMultiFileEditInternalTelemetryService,
-		@INotebookService private readonly notebookService: INotebookService
+		@INotebookService private readonly notebookService: INotebookService,
+		@IConversationTelemetryService private readonly conversationTelemetryService: IConversationTelemetryService
 	) { }
 
 	handleUserAction(e: vscode.ChatUserActionEvent, agentId: string): void {
@@ -175,6 +177,20 @@ export class UserFeedbackService implements IUserFeedbackService {
 						isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
 						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0
 					});
+
+					// NEW: Send query.completed telemetry with user action
+					const userAction = outcomes.get(e.action.outcome);
+					if (userAction && result.metadata?.sessionId && result.metadata?.responseId) {
+						this.conversationTelemetryService.sendQueryCompleted(
+							result.metadata.sessionId,
+							result.metadata.responseId,
+							'success',
+							userAction,
+							e.action.outcome === vscode.ChatEditingSessionActionOutcome.Accepted, // editApplied
+							undefined, // totalDuration - not available here
+							undefined  // messageCount - not available here
+						);
+					}
 
 					if (result.metadata?.responseId
 						&& (e.action.outcome === vscode.ChatEditingSessionActionOutcome.Accepted
