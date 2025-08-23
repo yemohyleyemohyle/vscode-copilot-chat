@@ -64,6 +64,7 @@ import { SearchServiceImpl } from '../../../platform/search/vscode-node/searchSe
 import { ISimulationTestContext, NulSimulationTestContext } from '../../../platform/simulationTestContext/common/simulationTestContext';
 import { ITabsAndEditorsService } from '../../../platform/tabs/common/tabsAndEditorsService';
 import { TabsAndEditorsServiceImpl } from '../../../platform/tabs/vscode/tabsAndEditorsServiceImpl';
+import { ConversationTelemetryService, IConversationTelemetryService } from '../../../platform/telemetry/common/conversationTelemetry';
 import { NullTelemetryService } from '../../../platform/telemetry/common/nullTelemetryService';
 import { ITelemetryService } from '../../../platform/telemetry/common/telemetry';
 import { ITerminalService } from '../../../platform/terminal/common/terminalService';
@@ -133,6 +134,7 @@ export function createExtensionTestingServices(): TestingServiceCollection {
 	testingServiceCollection.define(ITabsAndEditorsService, new SyncDescriptor(TabsAndEditorsServiceImpl));
 	testingServiceCollection.define(IEmbeddingsComputer, new SyncDescriptor(RemoteEmbeddingsComputer));
 	testingServiceCollection.define(ITelemetryService, new SyncDescriptor(NullTelemetryService));
+	testingServiceCollection.define(IConversationTelemetryService, new SyncDescriptor(ConversationTelemetryService));
 	testingServiceCollection.define(ILanguageDiagnosticsService, new SyncDescriptor(LanguageDiagnosticsServiceImpl));
 	testingServiceCollection.define(ITokenizerProvider, new SyncDescriptor(TokenizerProvider, [true]));
 	testingServiceCollection.define(IPromptWorkspaceLabels, new SyncDescriptor(PromptWorkspaceLabels));
