@@ -83,52 +83,46 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, isOutput, logService);
 }
 
+// Track messages that have already been logged to avoid duplicates
+const loggedMessages = new Set<string>();
+
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService) {
 	for (const message of messages) {
-		const messageUuid = generateUuid();
+		// Create a hash of the message content to detect duplicates
+		const messageHash = JSON.stringify({
+			role: message.role,
+			content: message.content,
+			tool_calls: message.tool_calls,
+			tool_call_id: message.tool_call_id
+		});
 
-		// Extract message content as string
-		let messageContent: string;
-		if (typeof message.content === 'string') {
-			messageContent = message.content;
-		} else if (Array.isArray(message.content)) {
-			// Handle array content by extracting text parts
-			messageContent = message.content.map((part: any) => {
-				if (typeof part === 'string') {
-					return part;
-				}
-				if (part.type === 'text') {
-					return part.text || '';
-				}
-				return `[${part.type || 'unknown'}]`;
-			}).join('');
-		} else {
-			messageContent = '';
+		// Skip if this exact message has already been logged
+		if (loggedMessages.has(messageHash)) {
+			logService?.debug(`[engine.message.added] Skipping duplicate message: ${message.role}`);
+			continue;
 		}
+
+		// Mark this message as logged
+		loggedMessages.add(messageHash);
+
+		const messageUuid = generateUuid();
 
 		// Extract context properties with fallbacks
 		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
 		const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
 
-		// Debug log available properties
-		logService?.debug(`[engine.message.added] Available telemetryData properties: ${Object.keys(telemetryData.properties).join(', ')}`);
-
 		const messageData = telemetryData.extendedBy({
 			messageUuid,
-			messageRole: message.role,
 			messageDirection,
 			conversationId,
 			headerRequestId,
-			messageContent,
-			messageContentLength: messageContent.length.toString(),
-			hasToolCalls: ('tool_calls' in message && message.tool_calls && Array.isArray(message.tool_calls)) ? 'true' : 'false',
-			hasToolCallId: ('tool_call_id' in message && message.tool_call_id) ? 'true' : 'false'
+			messageJson: JSON.stringify(message), // Store entire message as JSON
 		});
 
 		telemetryService.sendInternalMSFTTelemetryEvent('engine.message.added', messageData.properties, messageData.measurements);
 
-		// Comprehensive logging with actual values (500 chars of content)
-		logService?.info(`[engine.message.added] UUID: ${messageUuid}, Role: ${message.role}, Direction: ${messageDirection}, ConversationId: ${conversationId}, HeaderRequestId: ${headerRequestId}, ContentLength: ${messageContent.length}, Content: ${messageContent.substring(0, 500)}${messageContent.length > 500 ? '...' : ''}`);
+		// Log entire messageData as JSON
+		logService?.info(`[engine.message.added] ${JSON.stringify(messageData.properties)}`);
 	}
 }
 
