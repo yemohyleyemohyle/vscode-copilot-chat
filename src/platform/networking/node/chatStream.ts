@@ -106,12 +106,19 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 			messageContent = '';
 		}
 
+		// Extract context properties with fallbacks
+		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
+		const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
+
+		// Debug log available properties
+		logService?.debug(`[engine.message.added] Available telemetryData properties: ${Object.keys(telemetryData.properties).join(', ')}`);
+
 		const messageData = telemetryData.extendedBy({
 			messageUuid,
 			messageRole: message.role,
 			messageDirection,
-			conversationId: telemetryData.properties.conversationId || telemetryData.properties.sessionId,
-			headerRequestId: telemetryData.properties.headerRequestId,
+			conversationId,
+			headerRequestId,
 			messageContent,
 			messageContentLength: messageContent.length.toString(),
 			hasToolCalls: ('tool_calls' in message && message.tool_calls && Array.isArray(message.tool_calls)) ? 'true' : 'false',
@@ -119,7 +126,9 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 		});
 
 		telemetryService.sendInternalMSFTTelemetryEvent('engine.message.added', messageData.properties, messageData.measurements);
-		logService?.info(`[engine.message.added] UUID: ${messageUuid}, Role: ${message.role}, Direction: ${messageDirection}, ContentLength: ${messageContent.length}`);
+
+		// Comprehensive logging with actual values (500 chars of content)
+		logService?.info(`[engine.message.added] UUID: ${messageUuid}, Role: ${message.role}, Direction: ${messageDirection}, ConversationId: ${conversationId}, HeaderRequestId: ${headerRequestId}, ContentLength: ${messageContent.length}, Content: ${messageContent.substring(0, 500)}${messageContent.length > 500 ? '...' : ''}`);
 	}
 }
 
