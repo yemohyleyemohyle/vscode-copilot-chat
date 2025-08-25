@@ -111,7 +111,8 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
 		const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
 
-		const messageData = telemetryData.extendedBy({
+		// Create clean message-specific telemetry data (not inheriting all base properties)
+		const messageData = TelemetryData.createAndMarkAsIssued({
 			messageUuid,
 			messageDirection,
 			conversationId,
