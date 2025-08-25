@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
+import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { toTextParts } from '../../chat/common/globalStringUtils';
 import { ILogService } from '../../log/common/logService';
 import { ITelemetryService, multiplexProperties } from '../../telemetry/common/telemetry';
@@ -75,8 +76,51 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 
+	// Send individual message telemetry for deduplication tracking
+	sendIndividualMessagesTelemetry(telemetryService, messages, telemetryData, isOutput ? 'output' : 'input', logService);
+
 	// Also send length-only telemetry
 	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, isOutput, logService);
+}
+
+function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService) {
+	for (const message of messages) {
+		const messageUuid = generateUuid();
+
+		// Extract message content as string
+		let messageContent: string;
+		if (typeof message.content === 'string') {
+			messageContent = message.content;
+		} else if (Array.isArray(message.content)) {
+			// Handle array content by extracting text parts
+			messageContent = message.content.map((part: any) => {
+				if (typeof part === 'string') {
+					return part;
+				}
+				if (part.type === 'text') {
+					return part.text || '';
+				}
+				return `[${part.type || 'unknown'}]`;
+			}).join('');
+		} else {
+			messageContent = '';
+		}
+
+		const messageData = telemetryData.extendedBy({
+			messageUuid,
+			messageRole: message.role,
+			messageDirection,
+			conversationId: telemetryData.properties.conversationId || telemetryData.properties.sessionId,
+			headerRequestId: telemetryData.properties.headerRequestId,
+			messageContent,
+			messageContentLength: messageContent.length.toString(),
+			hasToolCalls: ('tool_calls' in message && message.tool_calls && Array.isArray(message.tool_calls)) ? 'true' : 'false',
+			hasToolCallId: ('tool_call_id' in message && message.tool_call_id) ? 'true' : 'false'
+		});
+
+		telemetryService.sendInternalMSFTTelemetryEvent('engine.message.added', messageData.properties, messageData.measurements);
+		logService?.info(`[engine.message.added] UUID: ${messageUuid}, Role: ${message.role}, Direction: ${messageDirection}, ContentLength: ${messageContent.length}`);
+	}
 }
 
 export function prepareChatCompletionForReturn(
