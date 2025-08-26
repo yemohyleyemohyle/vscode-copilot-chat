@@ -111,19 +111,33 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
 		const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
 
-		// Create clean message-specific telemetry data (not inheriting all base properties)
-		const messageData = TelemetryData.createAndMarkAsIssued({
-			messageUuid,
-			messageDirection,
-			conversationId,
-			headerRequestId,
-			messageJson: JSON.stringify(message), // Store entire message as JSON
-		}, telemetryData.measurements); // Include measurements from original telemetryData
+		// Convert message to JSON string for chunking
+		const messageJsonString = JSON.stringify(message);
+		const maxChunkSize = 8000;
 
-		telemetryService.sendInternalMSFTTelemetryEvent('engine.message.added', messageData.properties, messageData.measurements);
+		// Split messageJson into chunks of 8000 characters or less
+		const chunks: string[] = [];
+		for (let i = 0; i < messageJsonString.length; i += maxChunkSize) {
+			chunks.push(messageJsonString.substring(i, i + maxChunkSize));
+		}
 
-		// Log entire messageData as JSON (both properties and measurements)
-		logService?.info(`[engine.message.added] properties: ${JSON.stringify(messageData.properties)}, measurements: ${JSON.stringify(messageData.measurements)}`);
+		// Send one telemetry event per chunk
+		for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+			const messageData = TelemetryData.createAndMarkAsIssued({
+				messageUuid,
+				messageDirection,
+				conversationId,
+				headerRequestId,
+				messageJson: chunks[chunkIndex], // Store chunk of message JSON
+				chunkIndex: chunkIndex.toString(), // 0-based chunk index for ordering
+				totalChunks: chunks.length.toString(), // Total number of chunks for this message
+			}, telemetryData.measurements); // Include measurements from original telemetryData
+
+			telemetryService.sendInternalMSFTTelemetryEvent('engine.message.added', messageData.properties, messageData.measurements);
+
+			// Log entire messageData as JSON (both properties and measurements)
+			logService?.info(`[engine.message.added] chunk ${chunkIndex + 1}/${chunks.length} properties: ${JSON.stringify(messageData.properties)}, measurements: ${JSON.stringify(messageData.measurements)}`);
+		}
 	}
 }
 
