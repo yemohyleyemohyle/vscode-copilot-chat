@@ -118,12 +118,12 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 			conversationId,
 			headerRequestId,
 			messageJson: JSON.stringify(message), // Store entire message as JSON
-		});
+		}, telemetryData.measurements); // Include measurements from original telemetryData
 
 		telemetryService.sendInternalMSFTTelemetryEvent('engine.message.added', messageData.properties, messageData.measurements);
 
-		// Log entire messageData as JSON
-		logService?.info(`[engine.message.added] ${JSON.stringify(messageData.properties)}`);
+		// Log entire messageData as JSON (both properties and measurements)
+		logService?.info(`[engine.message.added] properties: ${JSON.stringify(messageData.properties)}, measurements: ${JSON.stringify(messageData.measurements)}`);
 	}
 }
 
