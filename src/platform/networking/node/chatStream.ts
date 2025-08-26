@@ -76,8 +76,13 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 
-	// Send individual message telemetry for deduplication tracking
-	sendIndividualMessagesTelemetry(telemetryService, messages, telemetryData, isOutput ? 'output' : 'input', logService);
+	// Send individual message telemetry for deduplication tracking and collect UUIDs
+	const messageUuids = sendIndividualMessagesTelemetry(telemetryService, messages, telemetryData, isOutput ? 'output' : 'input', logService);
+
+	// Send model call telemetry with message UUIDs (separate events for input and output)
+	if (messageUuids.length > 0) {
+		sendEngineModelCallTelemetry(telemetryService, messageUuids, telemetryData, isOutput ? 'output' : 'input', logService);
+	}
 
 	// Also send length-only telemetry
 	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, isOutput, logService);
@@ -86,7 +91,9 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 // Track messages that have already been logged to avoid duplicates
 const loggedMessages = new Set<string>();
 
-function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService) {
+function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): string[] {
+	const messageUuids: string[] = [];
+
 	for (const message of messages) {
 		// Create a hash of the message content to detect duplicates
 		const messageHash = JSON.stringify({
@@ -106,6 +113,7 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 		loggedMessages.add(messageHash);
 
 		const messageUuid = generateUuid();
+		messageUuids.push(messageUuid); // Collect UUIDs for model call tracking
 
 		// Extract context properties with fallbacks
 		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
@@ -139,6 +147,37 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 			logService?.info(`[engine.message.added] chunk ${chunkIndex + 1}/${chunks.length} properties: ${JSON.stringify(messageData.properties)}, measurements: ${JSON.stringify(messageData.measurements)}`);
 		}
 	}
+
+	return messageUuids; // Return collected message UUIDs
+}
+
+function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messageUuids: string[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService) {
+	// Get the unique model call ID
+	const modelCallId = telemetryData.properties.modelCallId as string;
+	if (!modelCallId) {
+		logService?.warn('[TELEMETRY] modelCallId not found in telemetryData, cannot send engine.modelCall event');
+		return;
+	}
+
+	// Extract context properties with fallbacks
+	const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
+	const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
+
+	// Create model call telemetry data for input or output
+	const eventName = messageDirection === 'input' ? 'engine.modelCall.input' : 'engine.modelCall.output';
+	const modelCallData = TelemetryData.createAndMarkAsIssued({
+		modelCallId,
+		conversationId,
+		headerRequestId,
+		messageDirection,
+		messageUuids: JSON.stringify(messageUuids), // Array of message UUIDs for this direction
+		messageCount: messageUuids.length.toString(),
+	}, telemetryData.measurements); // Include measurements from original telemetryData
+
+	telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);
+
+	// Log model call telemetry
+	logService?.info(`[${eventName}] modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
 }
 
 export function prepareChatCompletionForReturn(
