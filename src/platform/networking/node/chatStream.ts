@@ -103,17 +103,17 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 			tool_call_id: message.tool_call_id
 		});
 
-		// Skip if this exact message has already been logged
+		const messageUuid = generateUuid();
+		messageUuids.push(messageUuid); // Always collect UUIDs for model call tracking
+
+		// Skip sending engine.message.added if this exact message has already been logged
 		if (loggedMessages.has(messageHash)) {
-			logService?.debug(`[engine.message.added] Skipping duplicate message: ${message.role}`);
+			logService?.debug(`[engine.message.added] Skipping duplicate message content, but including UUID in model call: ${message.role}`);
 			continue;
 		}
 
-		// Mark this message as logged
+		// Mark this message as logged for engine.message.added deduplication
 		loggedMessages.add(messageHash);
-
-		const messageUuid = generateUuid();
-		messageUuids.push(messageUuid); // Collect UUIDs for model call tracking
 
 		// Extract context properties with fallbacks
 		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
