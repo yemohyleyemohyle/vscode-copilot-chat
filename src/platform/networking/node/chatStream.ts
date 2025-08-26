@@ -91,6 +91,9 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 // Track messages that have already been logged to avoid duplicates
 const loggedMessages = new Set<string>();
 
+// Map from message hash to UUID to ensure same content gets same UUID
+const messageHashToUuid = new Map<string, string>();
+
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string, headerRequestId: string }> {
 	const messageData: Array<{ uuid: string, headerRequestId: string }> = [];
 
@@ -103,7 +106,12 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 			tool_call_id: message.tool_call_id
 		});
 
-		const messageUuid = generateUuid();
+		// Get existing UUID for this message content, or generate a new one
+		let messageUuid = messageHashToUuid.get(messageHash);
+		if (!messageUuid) {
+			messageUuid = generateUuid();
+			messageHashToUuid.set(messageHash, messageUuid);
+		}
 
 		// Extract context properties with fallbacks
 		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
@@ -114,7 +122,7 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 
 		// Skip sending engine.message.added if this exact message has already been logged
 		if (loggedMessages.has(messageHash)) {
-			logService?.debug(`[engine.message.added] Skipping duplicate message content, but including UUID in model call: ${message.role}`);
+			logService?.debug(`[engine.message.added] Reusing existing UUID ${messageUuid} for duplicate message content: ${message.role}`);
 			continue;
 		}
 
