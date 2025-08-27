@@ -76,6 +76,14 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 
+	// Skip input message telemetry for retry requests to avoid duplicates
+	// Retry requests are identified by the presence of retryAfterFilterCategory property
+	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
+	if (!isOutput && isRetryRequest) {
+		logService?.debug('[TELEMETRY] Skipping input message telemetry for retry request to avoid duplicates');
+		return;
+	}
+
 	// Send individual message telemetry for deduplication tracking and collect UUIDs with their headerRequestIds
 	const messageData = sendIndividualMessagesTelemetry(telemetryService, messages, telemetryData, isOutput ? 'output' : 'input', logService);
 
