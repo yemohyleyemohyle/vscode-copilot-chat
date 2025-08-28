@@ -11,6 +11,7 @@ import { ITelemetryService, multiplexProperties } from '../../telemetry/common/t
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { APIJsonData, CAPIChatMessage, ChatCompletion, rawMessageToCAPI } from '../common/openai';
 import { FinishedCompletion, convertToAPIJsonData } from './stream';
+import { TrajectoryContext } from './trajectoryContext';
 
 // TODO @lramos15 - Find a better file for this, since this file is for the chat stream and should not be telemetry related
 export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
@@ -179,9 +180,9 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 
 	// Extract trajectory context - messageId links all model calls for a single user query
 	const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
-	// Use existing messageId as trajectory ID (flows from user request through intent handlers)
-	// Falls back to modelCallId for independent tool calls that don't have messageId
-	const trajectoryId = telemetryData.properties.messageId as string || modelCallId;
+	// Use trajectory ID from async context if available (links supplemental tool calls to main request)
+	// Otherwise fall back to messageId, then modelCallId for independent calls
+	const trajectoryId = TrajectoryContext.getCurrentTrajectoryId() || telemetryData.properties.messageId as string || modelCallId;
 
 	// Group messages by headerRequestId
 	const messagesByHeaderRequestId = new Map<string, string[]>();

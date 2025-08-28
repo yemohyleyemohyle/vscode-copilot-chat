@@ -17,6 +17,7 @@ import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignor
 import { ILogService } from '../../../platform/log/common/logService';
 import { IResponseDelta, OptionalChatRequestParams } from '../../../platform/networking/common/fetch';
 import { FilterReason } from '../../../platform/networking/common/openai';
+import { TrajectoryContext } from '../../../platform/networking/node/trajectoryContext';
 import { IRequestLogger } from '../../../platform/requestLogger/node/requestLogger';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
@@ -123,7 +124,11 @@ export class DefaultIntentRequestHandler {
 				return confirmationResult;
 			}
 
-			const resultDetails = await this._requestLogger.captureInvocation(this.request, () => this.runWithToolCalling(intentInvocation));
+			const resultDetails = await this._requestLogger.captureInvocation(this.request, () =>
+				TrajectoryContext.run(this.chatTelemetryBuilder.telemetryMessageId, () =>
+					this.runWithToolCalling(intentInvocation)
+				)
+			);
 
 			let chatResult = resultDetails.chatResult || {};
 			this._surveyService.signalUsage(`${this.location === ChatLocation.Editor ? 'inline' : 'panel'}.${this.intent.id}`, this.documentContext?.document.languageId);
