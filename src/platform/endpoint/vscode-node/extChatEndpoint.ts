@@ -22,6 +22,7 @@ import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { ITokenizerProvider } from '../../tokenizer/node/tokenizer';
 import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { decodeStatefulMarker, encodeStatefulMarker, rawPartAsStatefulMarker } from '../common/statefulMarkerContainer';
+import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
 
 export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 	private readonly _maxTokens: number;
@@ -241,7 +242,7 @@ export class ExtensionContributedChatEndpoint implements IChatEndpoint {
 export function convertToApiChatMessage(messages: Raw.ChatMessage[]): Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2> {
 	const apiMessages: Array<vscode.LanguageModelChatMessage | vscode.LanguageModelChatMessage2> = [];
 	for (const message of messages) {
-		const apiContent: Array<vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart2 | vscode.LanguageModelToolCallPart | vscode.LanguageModelDataPart> = [];
+		const apiContent: Array<vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart2 | vscode.LanguageModelToolCallPart | vscode.LanguageModelDataPart | vscode.LanguageModelThinkingPart> = [];
 		// Easier to work with arrays everywhere, rather than string in some cases. So convert to a single text content part
 		for (const contentPart of message.content) {
 			if (contentPart.type === Raw.ChatCompletionContentPartKind.Text) {
@@ -266,6 +267,10 @@ export function convertToApiChatMessage(messages: Raw.ChatMessage[]): Array<vsco
 				const statefulMarker = rawPartAsStatefulMarker(contentPart);
 				if (statefulMarker) {
 					apiContent.push(new vscode.LanguageModelDataPart(encodeStatefulMarker(statefulMarker.modelId, statefulMarker.marker), CustomDataPartMimeTypes.StatefulMarker));
+				}
+				const thinkingData = rawPartAsThinkingData(contentPart);
+				if (thinkingData) {
+					apiContent.push(new vscode.LanguageModelThinkingPart(thinkingData.text, thinkingData.id, thinkingData.metadata));
 				}
 			}
 		}
