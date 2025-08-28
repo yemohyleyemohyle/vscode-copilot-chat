@@ -177,8 +177,11 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 		return;
 	}
 
-	// Extract trajectory context
+	// Extract trajectory context - messageId links all model calls for a single user query
 	const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
+	// Use existing messageId as trajectory ID (flows from user request through intent handlers)
+	// Falls back to modelCallId for independent tool calls that don't have messageId
+	const trajectoryId = telemetryData.properties.messageId as string || modelCallId;
 
 	// Group messages by headerRequestId
 	const messagesByHeaderRequestId = new Map<string, string[]>();
@@ -195,19 +198,18 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 		const eventName = messageDirection === 'input' ? 'engine.modelCall.input' : 'engine.modelCall.output';
 		const modelCallData = TelemetryData.createAndMarkAsIssued({
 			modelCallId,
-			conversationId, // Trajectory identifier linking main and supplementary calls
-			headerRequestId, // Specific to this set of messages (main vs supplementary)
+			trajectoryId, // Links all model calls for a single user query (reuses existing messageId)
+			conversationId, // Chat session identifier
+			headerRequestId, // Specific to this set of messages (distinguishes different calls within trajectory)
 			messageDirection,
 			messageUuids: JSON.stringify(messageUuids), // Array of message UUIDs for this headerRequestId
 			messageCount: messageUuids.length.toString(),
-			isSupplementary: (headerRequestId !== (telemetryData.properties.headerRequestId || 'unknown')).toString(), // Mark if this is a supplementary call
 		}, telemetryData.measurements); // Include measurements from original telemetryData
 
 		telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);
 
 		// Log model call telemetry
-		const callType = (headerRequestId !== (telemetryData.properties.headerRequestId || 'unknown')) ? 'supplementary' : 'main';
-		logService?.info(`[${eventName}] modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages (${callType}), headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
+		logService?.info(`[${eventName}] modelCallId: ${modelCallId}, trajectoryId: ${trajectoryId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
 	}
 }
 
