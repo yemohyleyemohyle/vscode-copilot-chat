@@ -69,6 +69,45 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 }
 
+function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, telemetryData: TelemetryData, logService?: ILogService) {
+	// Get the unique model call ID
+	const modelCallId = telemetryData.properties.modelCallId as string;
+	if (!modelCallId) {
+		logService?.warn('[TELEMETRY] modelCallId not found in telemetryData, cannot send engine.request.options event');
+		return;
+	}
+
+	// Extract all request.option.* properties
+	const requestOptions: { [key: string]: string } = {};
+	for (const [key, value] of Object.entries(telemetryData.properties)) {
+		if (key.startsWith('request.option.')) {
+			requestOptions[key] = value;
+		}
+	}
+
+	// Only send the event if there are request options
+	if (Object.keys(requestOptions).length === 0) {
+		logService?.debug('[TELEMETRY] No request options found, skipping engine.request.options event');
+		return;
+	}
+
+	// Extract context properties
+	const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
+	const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
+
+	const requestOptionsData = TelemetryData.createAndMarkAsIssued({
+		modelCallId,
+		conversationId,
+		headerRequestId,
+		...requestOptions, // Include all request.option.* properties
+	}, telemetryData.measurements); // Include measurements from original telemetryData
+
+	telemetryService.sendInternalMSFTTelemetryEvent('engine.request.options', requestOptionsData.properties, requestOptionsData.measurements);
+
+	// Log request options telemetry
+	logService?.info(`[engine.request.options] modelCallId: ${modelCallId}, headerRequestId: ${headerRequestId}, options: ${Object.keys(requestOptions).length}, properties: ${JSON.stringify(requestOptionsData.properties)}, measurements: ${JSON.stringify(requestOptionsData.measurements)}`);
+}
+
 export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messages),
@@ -80,7 +119,7 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	// Retry requests are identified by the presence of retryAfterFilterCategory property
 	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
 	if (!isOutput && isRetryRequest) {
-		logService?.debug('[TELEMETRY] Skipping input message telemetry for retry request to avoid duplicates');
+		logService?.debug('[TELEMETRY] Skipping input message telemetry (engine.message.added, engine.modelCall.input, engine.request.options) for retry request to avoid duplicates');
 		return;
 	}
 
@@ -90,6 +129,11 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	// Send model call telemetry grouped by headerRequestId (separate events for different headerRequestIds)
 	if (messageData.length > 0) {
 		sendEngineModelCallTelemetry(telemetryService, messageData, telemetryData, isOutput ? 'output' : 'input', logService);
+	}
+
+	// Send request options telemetry for input messages only
+	if (!isOutput) {
+		sendEngineRequestOptionsTelemetry(telemetryService, telemetryData, logService);
 	}
 
 	// Also send length-only telemetry
