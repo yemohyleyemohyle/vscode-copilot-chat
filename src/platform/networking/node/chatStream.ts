@@ -69,14 +69,7 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 }
 
-function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, telemetryData: TelemetryData, logService?: ILogService) {
-	// Get the unique model call ID
-	const modelCallId = telemetryData.properties.modelCallId as string;
-	if (!modelCallId) {
-		logService?.warn('[TELEMETRY] modelCallId not found in telemetryData, cannot send engine.request.options event');
-		return;
-	}
-
+function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, telemetryData: TelemetryData, logService?: ILogService): string | undefined {
 	// Extract all request.option.* properties
 	const requestOptions: { [key: string]: string } = {};
 	for (const [key, value] of Object.entries(telemetryData.properties)) {
@@ -85,15 +78,28 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 		}
 	}
 
-	// Only send the event if there are request options
+	// Only process if there are request options
 	if (Object.keys(requestOptions).length === 0) {
-		logService?.debug('[TELEMETRY] No request options found, skipping engine.request.options event');
-		return;
+		logService?.debug('[TELEMETRY] No request options found, skipping engine.request.options processing');
+		return undefined;
 	}
 
 	// Extract context properties
 	const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
 	const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
+
+	// Create a hash of the request options to detect duplicates
+	const requestOptionsHash = JSON.stringify(requestOptions);
+
+	// Get existing requestOptionsId for this content, or generate a new one
+	let requestOptionsId = requestOptionsHashToId.get(requestOptionsHash);
+	if (!requestOptionsId) {
+		requestOptionsId = generateUuid();
+		requestOptionsHashToId.set(requestOptionsHash, requestOptionsId);
+	}
+
+	// Always send the event for each request (no deduplication within request)
+	// This ensures request options are always in the same time window as model calls
 
 	// Convert request options to JSON string for chunking
 	const requestOptionsJsonString = JSON.stringify(requestOptions);
@@ -108,7 +114,7 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 	// Send one telemetry event per chunk
 	for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
 		const requestOptionsData = TelemetryData.createAndMarkAsIssued({
-			modelCallId,
+			requestOptionsId,
 			conversationId,
 			headerRequestId,
 			requestOptionsJson: chunks[chunkIndex], // Store chunk of request options JSON
@@ -116,11 +122,13 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 			totalChunks: chunks.length.toString(), // Total number of chunks for this request
 		}, telemetryData.measurements); // Include measurements from original telemetryData
 
-		telemetryService.sendInternalMSFTTelemetryEvent('engine.request.options', requestOptionsData.properties, requestOptionsData.measurements);
+		telemetryService.sendInternalMSFTTelemetryEvent('engine.request.options.added', requestOptionsData.properties, requestOptionsData.measurements);
 
 		// Log request options telemetry
-		logService?.info(`[engine.request.options] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(requestOptionsData.properties)}, measurements: ${JSON.stringify(requestOptionsData.measurements)}`);
+		logService?.info(`[engine.request.options.added] chunk ${chunkIndex + 1}/${chunks.length} requestOptionsId: ${requestOptionsId}, headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(requestOptionsData.properties)}, measurements: ${JSON.stringify(requestOptionsData.measurements)}`);
 	}
+
+	return requestOptionsId;
 }
 
 export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
@@ -134,7 +142,7 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	// Retry requests are identified by the presence of retryAfterFilterCategory property
 	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
 	if (!isOutput && isRetryRequest) {
-		logService?.debug('[TELEMETRY] Skipping input message telemetry (engine.message.added, engine.modelCall.input, engine.request.options) for retry request to avoid duplicates');
+		logService?.debug('[TELEMETRY] Skipping input message telemetry (engine.message.added, engine.modelCall.input, engine.request.options.added) for retry request to avoid duplicates');
 		return;
 	}
 
@@ -142,13 +150,9 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	const messageData = sendIndividualMessagesTelemetry(telemetryService, messages, telemetryData, isOutput ? 'output' : 'input', logService);
 
 	// Send model call telemetry grouped by headerRequestId (separate events for different headerRequestIds)
+	// For input calls, this also handles request options deduplication
 	if (messageData.length > 0) {
 		sendEngineModelCallTelemetry(telemetryService, messageData, telemetryData, isOutput ? 'output' : 'input', logService);
-	}
-
-	// Send request options telemetry for input messages only
-	if (!isOutput) {
-		sendEngineRequestOptionsTelemetry(telemetryService, telemetryData, logService);
 	}
 
 	// Also send length-only telemetry
@@ -160,6 +164,9 @@ const loggedMessages = new Set<string>();
 
 // Map from message hash to UUID to ensure same content gets same UUID
 const messageHashToUuid = new Map<string, string>();
+
+// Map from request options hash to requestOptionsId to ensure same options get same ID
+const requestOptionsHashToId = new Map<string, string>();
 
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string; headerRequestId: string }> {
 	const messageData: Array<{ uuid: string; headerRequestId: string }> = [];
@@ -236,6 +243,12 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 		return;
 	}
 
+	// For input calls, process request options and get requestOptionsId
+	let requestOptionsId: string | undefined;
+	if (messageDirection === 'input') {
+		requestOptionsId = sendEngineRequestOptionsTelemetry(telemetryService, telemetryData, logService);
+	}
+
 	// Extract trajectory context
 	const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
 
@@ -274,12 +287,14 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 				chunkIndex: chunkIndex.toString(), // 0-based chunk index for ordering
 				totalChunks: chunks.length.toString(), // Total number of chunks for this headerRequestId
 				messageCount: messageUuids.length.toString(),
+				...(requestOptionsId && { requestOptionsId }), // Add requestOptionsId for input calls
 			}, telemetryData.measurements); // Include measurements from original telemetryData
 
 			telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);
 
 			// Log model call telemetry
-			logService?.info(`[${eventName}] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
+			const requestOptionsLog = requestOptionsId ? `, requestOptionsId: ${requestOptionsId}` : '';
+			logService?.info(`[${eventName}] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}${requestOptionsLog}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
 		}
 	}
 }
