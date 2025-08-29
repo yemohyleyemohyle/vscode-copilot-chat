@@ -102,16 +102,16 @@ const loggedMessages = new Set<string>();
 // Map from message hash to UUID to ensure same content gets same UUID
 const messageHashToUuid = new Map<string, string>();
 
-function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string, headerRequestId: string }> {
-	const messageData: Array<{ uuid: string, headerRequestId: string }> = [];
+function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string; headerRequestId: string }> {
+	const messageData: Array<{ uuid: string; headerRequestId: string }> = [];
 
 	for (const message of messages) {
 		// Create a hash of the message content to detect duplicates
 		const messageHash = JSON.stringify({
 			role: message.role,
 			content: message.content,
-			tool_calls: message.tool_calls,
-			tool_call_id: message.tool_call_id
+			...(('tool_calls' in message && message.tool_calls) && { tool_calls: message.tool_calls }),
+			...(('tool_call_id' in message && message.tool_call_id) && { tool_call_id: message.tool_call_id })
 		});
 
 		// Get existing UUID for this message content, or generate a new one
@@ -169,7 +169,7 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 	return messageData; // Return collected message data with UUIDs and headerRequestIds
 }
 
-function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messageData: Array<{ uuid: string, headerRequestId: string }>, telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService) {
+function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messageData: Array<{ uuid: string; headerRequestId: string }>, telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService) {
 	// Get the unique model call ID
 	const modelCallId = telemetryData.properties.modelCallId as string;
 	if (!modelCallId) {
@@ -193,21 +193,35 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 	// Send separate telemetry events for each headerRequestId
 	for (const [headerRequestId, messageUuids] of messagesByHeaderRequestId) {
 		const eventName = messageDirection === 'input' ? 'engine.modelCall.input' : 'engine.modelCall.output';
-		const modelCallData = TelemetryData.createAndMarkAsIssued({
-			modelCallId,
-			conversationId, // Trajectory identifier linking main and supplementary calls
-			headerRequestId, // Specific to this set of messages (main vs supplementary)
-			messageDirection,
-			messageUuids: JSON.stringify(messageUuids), // Array of message UUIDs for this headerRequestId
-			messageCount: messageUuids.length.toString(),
-			isSupplementary: (headerRequestId !== (telemetryData.properties.headerRequestId || 'unknown')).toString(), // Mark if this is a supplementary call
-		}, telemetryData.measurements); // Include measurements from original telemetryData
 
-		telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);
+		// Convert messageUuids to JSON string for chunking
+		const messageUuidsJsonString = JSON.stringify(messageUuids);
+		const maxChunkSize = 8000;
 
-		// Log model call telemetry
-		const callType = (headerRequestId !== (telemetryData.properties.headerRequestId || 'unknown')) ? 'supplementary' : 'main';
-		logService?.info(`[${eventName}] modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages (${callType}), headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
+		// Split messageUuids JSON into chunks of 8000 characters or less
+		const chunks: string[] = [];
+		for (let i = 0; i < messageUuidsJsonString.length; i += maxChunkSize) {
+			chunks.push(messageUuidsJsonString.substring(i, i + maxChunkSize));
+		}
+
+		// Send one telemetry event per chunk
+		for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+			const modelCallData = TelemetryData.createAndMarkAsIssued({
+				modelCallId,
+				conversationId, // Trajectory identifier linking main and supplementary calls
+				headerRequestId, // Specific to this set of messages
+				messageDirection,
+				messageUuids: chunks[chunkIndex], // Store chunk of messageUuids JSON
+				chunkIndex: chunkIndex.toString(), // 0-based chunk index for ordering
+				totalChunks: chunks.length.toString(), // Total number of chunks for this headerRequestId
+				messageCount: messageUuids.length.toString(),
+			}, telemetryData.measurements); // Include measurements from original telemetryData
+
+			telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);
+
+			// Log model call telemetry
+			logService?.info(`[${eventName}] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
+		}
 	}
 }
 
