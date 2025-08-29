@@ -95,17 +95,32 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 	const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
 	const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
 
-	const requestOptionsData = TelemetryData.createAndMarkAsIssued({
-		modelCallId,
-		conversationId,
-		headerRequestId,
-		...requestOptions, // Include all request.option.* properties
-	}, telemetryData.measurements); // Include measurements from original telemetryData
+	// Convert request options to JSON string for chunking
+	const requestOptionsJsonString = JSON.stringify(requestOptions);
+	const maxChunkSize = 8000;
 
-	telemetryService.sendInternalMSFTTelemetryEvent('engine.request.options', requestOptionsData.properties, requestOptionsData.measurements);
+	// Split request options JSON into chunks of 8000 characters or less
+	const chunks: string[] = [];
+	for (let i = 0; i < requestOptionsJsonString.length; i += maxChunkSize) {
+		chunks.push(requestOptionsJsonString.substring(i, i + maxChunkSize));
+	}
 
-	// Log request options telemetry
-	logService?.info(`[engine.request.options] modelCallId: ${modelCallId}, headerRequestId: ${headerRequestId}, options: ${Object.keys(requestOptions).length}, properties: ${JSON.stringify(requestOptionsData.properties)}, measurements: ${JSON.stringify(requestOptionsData.measurements)}`);
+	// Send one telemetry event per chunk
+	for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+		const requestOptionsData = TelemetryData.createAndMarkAsIssued({
+			modelCallId,
+			conversationId,
+			headerRequestId,
+			requestOptionsJson: chunks[chunkIndex], // Store chunk of request options JSON
+			chunkIndex: chunkIndex.toString(), // 0-based chunk index for ordering
+			totalChunks: chunks.length.toString(), // Total number of chunks for this request
+		}, telemetryData.measurements); // Include measurements from original telemetryData
+
+		telemetryService.sendInternalMSFTTelemetryEvent('engine.request.options', requestOptionsData.properties, requestOptionsData.measurements);
+
+		// Log request options telemetry
+		logService?.info(`[engine.request.options] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(requestOptionsData.properties)}, measurements: ${JSON.stringify(requestOptionsData.measurements)}`);
+	}
 }
 
 export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
