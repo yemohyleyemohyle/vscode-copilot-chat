@@ -94,12 +94,14 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 	// Get existing requestOptionsId for this content, or generate a new one
 	let requestOptionsId = requestOptionsHashToId.get(requestOptionsHash);
 	if (!requestOptionsId) {
+		// This is a new set of request options, generate ID and send the event
 		requestOptionsId = generateUuid();
 		requestOptionsHashToId.set(requestOptionsHash, requestOptionsId);
+	} else {
+		// Skip sending engine.request.options.added if this exact request options have already been logged
+		logService?.debug(`[engine.request.options.added] Reusing existing requestOptionsId ${requestOptionsId} for duplicate request options`);
+		return requestOptionsId;
 	}
-
-	// Always send the event for each request (no deduplication within request)
-	// This ensures request options are always in the same time window as model calls
 
 	// Convert request options to JSON string for chunking
 	const requestOptionsJsonString = JSON.stringify(requestOptions);
@@ -159,9 +161,6 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, isOutput, logService);
 }
 
-// Track messages that have already been logged to avoid duplicates
-const loggedMessages = new Set<string>();
-
 // Map from message hash to UUID to ensure same content gets same UUID
 const messageHashToUuid = new Map<string, string>();
 
@@ -182,26 +181,26 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 
 		// Get existing UUID for this message content, or generate a new one
 		let messageUuid = messageHashToUuid.get(messageHash);
-		if (!messageUuid) {
-			messageUuid = generateUuid();
-			messageHashToUuid.set(messageHash, messageUuid);
-		}
 
 		// Extract context properties with fallbacks
 		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
 		const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
 
-		// Always collect UUIDs and headerRequestIds for model call tracking
-		messageData.push({ uuid: messageUuid, headerRequestId });
+		if (!messageUuid) {
+			// This is a new message, generate UUID and send the event
+			messageUuid = generateUuid();
+			messageHashToUuid.set(messageHash, messageUuid);
+		} else {
+			// Always collect UUIDs and headerRequestIds for model call tracking
+			messageData.push({ uuid: messageUuid, headerRequestId });
 
-		// Skip sending engine.message.added if this exact message has already been logged
-		if (loggedMessages.has(messageHash)) {
+			// Skip sending engine.message.added if this exact message has already been logged
 			logService?.debug(`[engine.message.added] Reusing existing UUID ${messageUuid} for duplicate message content: ${message.role}`);
 			continue;
 		}
 
-		// Mark this message as logged for engine.message.added deduplication
-		loggedMessages.add(messageHash);
+		// Always collect UUIDs and headerRequestIds for model call tracking
+		messageData.push({ uuid: messageUuid, headerRequestId });
 
 		// Convert message to JSON string for chunking
 		const messageJsonString = JSON.stringify(message);
