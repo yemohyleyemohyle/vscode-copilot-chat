@@ -289,6 +289,7 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 				totalChunks: chunks.length.toString(), // Total number of chunks for this headerRequestId
 				messageCount: messageUuids.length.toString(),
 				...(requestOptionsId && { requestOptionsId }), // Add requestOptionsId for input calls
+				...(telemetryData.properties.turnIndex && { turnIndex: telemetryData.properties.turnIndex }), // Add turnIndex from original telemetryData
 			}, telemetryData.measurements); // Include measurements from original telemetryData
 
 			telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);
