@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
+import { hash } from '../../../util/vs/base/common/hash';
 import { LRUCache } from '../../../util/vs/base/common/map';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { toTextParts } from '../../chat/common/globalStringUtils';
@@ -90,7 +91,7 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 	const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
 
 	// Create a hash of the request options to detect duplicates
-	const requestOptionsHash = JSON.stringify(requestOptions);
+	const requestOptionsHash = hash(requestOptions).toString();
 
 	// Get existing requestOptionsId for this content, or generate a new one
 	let requestOptionsId = requestOptionsHashToId.get(requestOptionsHash);
@@ -173,12 +174,12 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 
 	for (const message of messages) {
 		// Create a hash of the message content to detect duplicates
-		const messageHash = JSON.stringify({
+		const messageHash = hash({
 			role: message.role,
 			content: message.content,
 			...(('tool_calls' in message && message.tool_calls) && { tool_calls: message.tool_calls }),
 			...(('tool_call_id' in message && message.tool_call_id) && { tool_call_id: message.tool_call_id })
-		});
+		}).toString();
 
 		// Get existing UUID for this message content, or generate a new one
 		let messageUuid = messageHashToUuid.get(messageHash);
