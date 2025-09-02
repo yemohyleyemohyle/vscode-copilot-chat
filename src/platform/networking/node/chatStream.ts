@@ -135,6 +135,41 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 	return requestOptionsId;
 }
 
+function sendEngineRequestAddedTelemetry(telemetryService: ITelemetryService, telemetryData: TelemetryData, logService?: ILogService): void {
+	// This function captures user-level request context (username, session info, user preferences, etc.)
+	// It's called once per unique user request (identified by headerRequestId)
+	// It excludes message content and request options which are captured separately
+
+	// Extract headerRequestId to check for uniqueness
+	const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
+	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
+
+	// Check if we've already processed this headerRequestId
+	if (processedHeaderRequestIds.has(headerRequestId)) {
+		logService?.debug(`[engine.request.added] Skipping duplicate headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}`);
+		return;
+	}
+
+	// Mark this headerRequestId as processed
+	processedHeaderRequestIds.set(headerRequestId, true);
+
+	// Filter out properties that start with "message" or "request.option"
+	const filteredProperties: { [key: string]: string } = {};
+	for (const [key, value] of Object.entries(telemetryData.properties)) {
+		if (!key.startsWith('message') && !key.startsWith('request.option')) {
+			filteredProperties[key] = value;
+		}
+	}
+
+	// Create telemetry data for the request
+	const requestData = TelemetryData.createAndMarkAsIssued(filteredProperties, telemetryData.measurements);
+
+	telemetryService.sendInternalMSFTTelemetryEvent('engine.request.added', requestData.properties, requestData.measurements);
+
+	// Log request telemetry
+	logService?.info(`[engine.request.added] headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}, properties: ${JSON.stringify(requestData.properties)}, measurements: ${JSON.stringify(requestData.measurements)}`);
+}
+
 export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
 	const telemetryDataWithPrompt = telemetryData.extendedBy({
 		messagesJson: JSON.stringify(messages),
@@ -145,6 +180,14 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	// Skip input message telemetry for retry requests to avoid duplicates
 	// Retry requests are identified by the presence of retryAfterFilterCategory property
 	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
+
+	// Send engine.request.added event for user input requests (once per headerRequestId)
+	// This captures user-level context (username, session info, etc.) for the user's request
+	// Note: This is different from model-level context which is captured in engine.modelCall events
+	if (!isOutput) {
+		sendEngineRequestAddedTelemetry(telemetryService, telemetryData, logService);
+	}
+
 	if (!isOutput && isRetryRequest) {
 		logService?.debug('[TELEMETRY] Skipping input message telemetry (engine.message.added, engine.modelCall.input, engine.request.options.added) for retry request to avoid duplicates');
 		return;
@@ -168,6 +211,9 @@ const messageHashToUuid = new LRUCache<string, string>(1000);
 
 // LRU cache from request options hash to requestOptionsId to ensure same options get same ID (limit: 500 entries)
 const requestOptionsHashToId = new LRUCache<string, string>(500);
+
+// LRU cache to track processed headerRequestIds to ensure engine.request.added is sent only once per headerRequestId (limit: 1000 entries)
+const processedHeaderRequestIds = new LRUCache<string, boolean>(1000);
 
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string; headerRequestId: string }> {
 	const messageData: Array<{ uuid: string; headerRequestId: string }> = [];
