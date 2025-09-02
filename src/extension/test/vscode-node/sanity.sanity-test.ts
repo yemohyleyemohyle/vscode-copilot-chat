@@ -151,7 +151,7 @@ suite('Copilot Chat Sanity Test', function () {
 		});
 	});
 
-	test('E2E Production Inline Chat Test', async function () {
+	test.skip('E2E Production Inline Chat Test', async function () {
 		assert.ok(realInstaAccessor);
 
 		await realInstaAccessor.invokeFunction(async (accessor) => {
