@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Raw } from '@vscode/prompt-tsx';
+import { LRUCache } from '../../../util/vs/base/common/map';
 import { generateUuid } from '../../../util/vs/base/common/uuid';
 import { toTextParts } from '../../chat/common/globalStringUtils';
 import { ILogService } from '../../log/common/logService';
@@ -161,11 +162,11 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, isOutput, logService);
 }
 
-// Map from message hash to UUID to ensure same content gets same UUID
-const messageHashToUuid = new Map<string, string>();
+// LRU cache from message hash to UUID to ensure same content gets same UUID (limit: 1000 entries)
+const messageHashToUuid = new LRUCache<string, string>(1000);
 
-// Map from request options hash to requestOptionsId to ensure same options get same ID
-const requestOptionsHashToId = new Map<string, string>();
+// LRU cache from request options hash to requestOptionsId to ensure same options get same ID (limit: 500 entries)
+const requestOptionsHashToId = new LRUCache<string, string>(500);
 
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string; headerRequestId: string }> {
 	const messageData: Array<{ uuid: string; headerRequestId: string }> = [];
