@@ -71,7 +71,19 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 }
 
-function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, telemetryData: TelemetryData, logService?: ILogService): string | undefined {
+// LRU cache from message hash to UUID to ensure same content gets same UUID (limit: 1000 entries)
+const messageHashToUuid = new LRUCache<string, string>(1000);
+
+// LRU cache from request options hash to requestOptionsId to ensure same options get same ID (limit: 500 entries)
+const requestOptionsHashToId = new LRUCache<string, string>(500);
+
+// LRU cache to track processed headerRequestIds to ensure model.request.added is sent only once per headerRequestId (limit: 1000 entries)
+const processedHeaderRequestIds = new LRUCache<string, boolean>(1000);
+
+// ===== MODEL TELEMETRY FUNCTIONS =====
+// These functions send 'model...' events and are grouped together for better organization
+
+function sendModelRequestOptionsTelemetry(telemetryService: ITelemetryService, telemetryData: TelemetryData, logService?: ILogService): string | undefined {
 	// Extract all request.option.* properties
 	const requestOptions: { [key: string]: string } = {};
 	for (const [key, value] of Object.entries(telemetryData.properties)) {
@@ -135,7 +147,7 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 	return requestOptionsId;
 }
 
-function sendEngineRequestAddedTelemetry(telemetryService: ITelemetryService, telemetryData: TelemetryData, logService?: ILogService): void {
+function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telemetryData: TelemetryData, logService?: ILogService): void {
 	// This function captures user-level request context (username, session info, user preferences, etc.)
 	// It's called once per unique user request (identified by headerRequestId)
 	// It excludes message content and request options which are captured separately
@@ -169,51 +181,6 @@ function sendEngineRequestAddedTelemetry(telemetryService: ITelemetryService, te
 	// Log request telemetry
 	logService?.info(`[model.request.added] headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}, properties: ${JSON.stringify(requestData.properties)}, measurements: ${JSON.stringify(requestData.measurements)}`);
 }
-
-export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
-	const telemetryDataWithPrompt = telemetryData.extendedBy({
-		messagesJson: JSON.stringify(messages),
-	});
-	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
-	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
-
-	// Skip input message telemetry for retry requests to avoid duplicates
-	// Retry requests are identified by the presence of retryAfterFilterCategory property
-	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
-
-	// Send model.request.added event for user input requests (once per headerRequestId)
-	// This captures user-level context (username, session info, etc.) for the user's request
-	// Note: This is different from model-level context which is captured in model.modelCall events
-	if (!isOutput) {
-		sendEngineRequestAddedTelemetry(telemetryService, telemetryData, logService);
-	}
-
-	if (!isOutput && isRetryRequest) {
-		logService?.debug('[TELEMETRY] Skipping input message telemetry (model.message.added, model.modelCall.input, model.request.options.added) for retry request to avoid duplicates');
-		return;
-	}
-
-	// Send individual message telemetry for deduplication tracking and collect UUIDs with their headerRequestIds
-	const messageData = sendIndividualMessagesTelemetry(telemetryService, messages, telemetryData, isOutput ? 'output' : 'input', logService);
-
-	// Send model call telemetry grouped by headerRequestId (separate events for different headerRequestIds)
-	// For input calls, this also handles request options deduplication
-	if (messageData.length > 0) {
-		sendEngineModelCallTelemetry(telemetryService, messageData, telemetryData, isOutput ? 'output' : 'input', logService);
-	}
-
-	// Also send length-only telemetry
-	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, isOutput, logService);
-}
-
-// LRU cache from message hash to UUID to ensure same content gets same UUID (limit: 1000 entries)
-const messageHashToUuid = new LRUCache<string, string>(1000);
-
-// LRU cache from request options hash to requestOptionsId to ensure same options get same ID (limit: 500 entries)
-const requestOptionsHashToId = new LRUCache<string, string>(500);
-
-// LRU cache to track processed headerRequestIds to ensure model.request.added is sent only once per headerRequestId (limit: 1000 entries)
-const processedHeaderRequestIds = new LRUCache<string, boolean>(1000);
 
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string; headerRequestId: string }> {
 	const messageData: Array<{ uuid: string; headerRequestId: string }> = [];
@@ -282,7 +249,7 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 	return messageData; // Return collected message data with UUIDs and headerRequestIds
 }
 
-function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messageData: Array<{ uuid: string; headerRequestId: string }>, telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService) {
+function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData: Array<{ uuid: string; headerRequestId: string }>, telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService) {
 	// Get the unique model call ID
 	const modelCallId = telemetryData.properties.modelCallId as string;
 	if (!modelCallId) {
@@ -293,7 +260,7 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 	// For input calls, process request options and get requestOptionsId
 	let requestOptionsId: string | undefined;
 	if (messageDirection === 'input') {
-		requestOptionsId = sendEngineRequestOptionsTelemetry(telemetryService, telemetryData, logService);
+		requestOptionsId = sendModelRequestOptionsTelemetry(telemetryService, telemetryData, logService);
 	}
 
 	// Extract trajectory context
@@ -345,6 +312,48 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 			logService?.info(`[${eventName}] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}${requestOptionsLog}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
 		}
 	}
+}
+
+function sendModelTelemetryEvents(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService): void {
+	// Send model.request.added event for user input requests (once per headerRequestId)
+	// This captures user-level context (username, session info, etc.) for the user's request
+	// Note: This is different from model-level context which is captured in model.modelCall events
+	if (!isOutput) {
+		sendNewRequestAddedTelemetry(telemetryService, telemetryData, logService);
+	}
+
+	// Skip input message telemetry for retry requests to avoid duplicates
+	// Retry requests are identified by the presence of retryAfterFilterCategory property
+	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
+	if (!isOutput && isRetryRequest) {
+		logService?.debug('[TELEMETRY] Skipping input message telemetry (model.message.added, model.modelCall.input, model.request.options.added) for retry request to avoid duplicates');
+		return;
+	}
+
+	// Send individual message telemetry for deduplication tracking and collect UUIDs with their headerRequestIds
+	const messageData = sendIndividualMessagesTelemetry(telemetryService, messages, telemetryData, isOutput ? 'output' : 'input', logService);
+
+	// Send model call telemetry grouped by headerRequestId (separate events for different headerRequestIds)
+	// For input calls, this also handles request options deduplication
+	// Always send model call telemetry regardless of whether messages are new or duplicates to ensure every model invocation is tracked
+	sendModelCallTelemetry(telemetryService, messageData, telemetryData, isOutput ? 'output' : 'input', logService);
+}
+
+// ===== END MODEL TELEMETRY FUNCTIONS =====
+
+export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
+	const telemetryDataWithPrompt = telemetryData.extendedBy({
+		messagesJson: JSON.stringify(messages),
+	});
+	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+
+	// Send all model telemetry events (model.request.added, model.message.added, model.modelCall.input/output, model.request.options.added)
+	// Comment out the line below to disable the new deduplicated model telemetry events
+	sendModelTelemetryEvents(telemetryService, messages, telemetryData, isOutput, logService);
+
+	// Also send length-only telemetry
+	sendEngineMessagesLengthTelemetry(telemetryService, messages, telemetryData, isOutput, logService);
 }
 
 export function prepareChatCompletionForReturn(
