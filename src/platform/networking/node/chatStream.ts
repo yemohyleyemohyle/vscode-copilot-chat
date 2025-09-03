@@ -82,7 +82,7 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 
 	// Only process if there are request options
 	if (Object.keys(requestOptions).length === 0) {
-		logService?.debug('[TELEMETRY] No request options found, skipping engine.request.options processing');
+		logService?.debug('[TELEMETRY] No request options found, skipping model.request.options processing');
 		return undefined;
 	}
 
@@ -100,8 +100,8 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 		requestOptionsId = generateUuid();
 		requestOptionsHashToId.set(requestOptionsHash, requestOptionsId);
 	} else {
-		// Skip sending engine.request.options.added if this exact request options have already been logged
-		logService?.debug(`[engine.request.options.added] Reusing existing requestOptionsId ${requestOptionsId} for duplicate request options`);
+		// Skip sending model.request.options.added if this exact request options have already been logged
+		logService?.debug(`[model.request.options.added] Reusing existing requestOptionsId ${requestOptionsId} for duplicate request options`);
 		return requestOptionsId;
 	}
 
@@ -126,10 +126,10 @@ function sendEngineRequestOptionsTelemetry(telemetryService: ITelemetryService, 
 			totalChunks: chunks.length.toString(), // Total number of chunks for this request
 		}, telemetryData.measurements); // Include measurements from original telemetryData
 
-		telemetryService.sendInternalMSFTTelemetryEvent('engine.request.options.added', requestOptionsData.properties, requestOptionsData.measurements);
+		telemetryService.sendInternalMSFTTelemetryEvent('model.request.options.added', requestOptionsData.properties, requestOptionsData.measurements);
 
 		// Log request options telemetry
-		logService?.info(`[engine.request.options.added] chunk ${chunkIndex + 1}/${chunks.length} requestOptionsId: ${requestOptionsId}, headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(requestOptionsData.properties)}, measurements: ${JSON.stringify(requestOptionsData.measurements)}`);
+		logService?.info(`[model.request.options.added] chunk ${chunkIndex + 1}/${chunks.length} requestOptionsId: ${requestOptionsId}, headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(requestOptionsData.properties)}, measurements: ${JSON.stringify(requestOptionsData.measurements)}`);
 	}
 
 	return requestOptionsId;
@@ -146,7 +146,7 @@ function sendEngineRequestAddedTelemetry(telemetryService: ITelemetryService, te
 
 	// Check if we've already processed this headerRequestId
 	if (processedHeaderRequestIds.has(headerRequestId)) {
-		logService?.debug(`[engine.request.added] Skipping duplicate headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}`);
+		logService?.debug(`[model.request.added] Skipping duplicate headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}`);
 		return;
 	}
 
@@ -164,10 +164,10 @@ function sendEngineRequestAddedTelemetry(telemetryService: ITelemetryService, te
 	// Create telemetry data for the request
 	const requestData = TelemetryData.createAndMarkAsIssued(filteredProperties, telemetryData.measurements);
 
-	telemetryService.sendInternalMSFTTelemetryEvent('engine.request.added', requestData.properties, requestData.measurements);
+	telemetryService.sendInternalMSFTTelemetryEvent('model.request.added', requestData.properties, requestData.measurements);
 
 	// Log request telemetry
-	logService?.info(`[engine.request.added] headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}, properties: ${JSON.stringify(requestData.properties)}, measurements: ${JSON.stringify(requestData.measurements)}`);
+	logService?.info(`[model.request.added] headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}, properties: ${JSON.stringify(requestData.properties)}, measurements: ${JSON.stringify(requestData.measurements)}`);
 }
 
 export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService) {
@@ -181,15 +181,15 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 	// Retry requests are identified by the presence of retryAfterFilterCategory property
 	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
 
-	// Send engine.request.added event for user input requests (once per headerRequestId)
+	// Send model.request.added event for user input requests (once per headerRequestId)
 	// This captures user-level context (username, session info, etc.) for the user's request
-	// Note: This is different from model-level context which is captured in engine.modelCall events
+	// Note: This is different from model-level context which is captured in model.modelCall events
 	if (!isOutput) {
 		sendEngineRequestAddedTelemetry(telemetryService, telemetryData, logService);
 	}
 
 	if (!isOutput && isRetryRequest) {
-		logService?.debug('[TELEMETRY] Skipping input message telemetry (engine.message.added, engine.modelCall.input, engine.request.options.added) for retry request to avoid duplicates');
+		logService?.debug('[TELEMETRY] Skipping input message telemetry (model.message.added, model.modelCall.input, model.request.options.added) for retry request to avoid duplicates');
 		return;
 	}
 
@@ -212,7 +212,7 @@ const messageHashToUuid = new LRUCache<string, string>(1000);
 // LRU cache from request options hash to requestOptionsId to ensure same options get same ID (limit: 500 entries)
 const requestOptionsHashToId = new LRUCache<string, string>(500);
 
-// LRU cache to track processed headerRequestIds to ensure engine.request.added is sent only once per headerRequestId (limit: 1000 entries)
+// LRU cache to track processed headerRequestIds to ensure model.request.added is sent only once per headerRequestId (limit: 1000 entries)
 const processedHeaderRequestIds = new LRUCache<string, boolean>(1000);
 
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string; headerRequestId: string }> {
@@ -242,8 +242,8 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 			// Always collect UUIDs and headerRequestIds for model call tracking
 			messageData.push({ uuid: messageUuid, headerRequestId });
 
-			// Skip sending engine.message.added if this exact message has already been logged
-			logService?.debug(`[engine.message.added] Reusing existing UUID ${messageUuid} for duplicate message content: ${message.role}`);
+			// Skip sending model.message.added if this exact message has already been logged
+			logService?.debug(`[model.message.added] Reusing existing UUID ${messageUuid} for duplicate message content: ${message.role}`);
 			continue;
 		}
 
@@ -272,10 +272,10 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 				totalChunks: chunks.length.toString(), // Total number of chunks for this message
 			}, telemetryData.measurements); // Include measurements from original telemetryData
 
-			telemetryService.sendInternalMSFTTelemetryEvent('engine.message.added', messageData.properties, messageData.measurements);
+			telemetryService.sendInternalMSFTTelemetryEvent('model.message.added', messageData.properties, messageData.measurements);
 
 			// Log entire messageData as JSON (both properties and measurements)
-			logService?.info(`[engine.message.added] chunk ${chunkIndex + 1}/${chunks.length} properties: ${JSON.stringify(messageData.properties)}, measurements: ${JSON.stringify(messageData.measurements)}`);
+			logService?.info(`[model.message.added] chunk ${chunkIndex + 1}/${chunks.length} properties: ${JSON.stringify(messageData.properties)}, measurements: ${JSON.stringify(messageData.measurements)}`);
 		}
 	}
 
@@ -286,7 +286,7 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 	// Get the unique model call ID
 	const modelCallId = telemetryData.properties.modelCallId as string;
 	if (!modelCallId) {
-		logService?.warn('[TELEMETRY] modelCallId not found in telemetryData, cannot send engine.modelCall event');
+		logService?.warn('[TELEMETRY] modelCallId not found in telemetryData, cannot send model.modelCall event');
 		return;
 	}
 
@@ -311,7 +311,7 @@ function sendEngineModelCallTelemetry(telemetryService: ITelemetryService, messa
 
 	// Send separate telemetry events for each headerRequestId
 	for (const [headerRequestId, messageUuids] of messagesByHeaderRequestId) {
-		const eventName = messageDirection === 'input' ? 'engine.modelCall.input' : 'engine.modelCall.output';
+		const eventName = messageDirection === 'input' ? 'model.modelCall.input' : 'model.modelCall.output';
 
 		// Convert messageUuids to JSON string for chunking
 		const messageUuidsJsonString = JSON.stringify(messageUuids);
