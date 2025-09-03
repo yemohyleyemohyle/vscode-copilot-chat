@@ -315,6 +315,13 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 }
 
 function sendModelTelemetryEvents(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, isOutput: boolean, logService?: ILogService): void {
+	// Skip model telemetry events for XtabProvider and api.* message sources
+	const messageSource = telemetryData.properties.messageSource as string;
+	if (messageSource === 'XtabProvider' || (messageSource && messageSource.startsWith('api.'))) {
+		logService?.debug(`[TELEMETRY] Skipping model telemetry events for messageSource: ${messageSource}`);
+		return;
+	}
+
 	// Send model.request.added event for user input requests (once per headerRequestId)
 	// This captures user-level context (username, session info, etc.) for the user's request
 	// Note: This is different from model-level context which is captured in model.modelCall events
