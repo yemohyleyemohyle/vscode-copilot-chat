@@ -153,10 +153,10 @@ function sendEngineRequestAddedTelemetry(telemetryService: ITelemetryService, te
 	// Mark this headerRequestId as processed
 	processedHeaderRequestIds.set(headerRequestId, true);
 
-	// Filter out properties that start with "message" or "request.option"
+	// Filter out properties that start with "message" or "request.option" and exclude modelCallId
 	const filteredProperties: { [key: string]: string } = {};
 	for (const [key, value] of Object.entries(telemetryData.properties)) {
-		if (!key.startsWith('message') && !key.startsWith('request.option')) {
+		if (!key.startsWith('message') && !key.startsWith('request.option') && key !== 'modelCallId') {
 			filteredProperties[key] = value;
 		}
 	}
