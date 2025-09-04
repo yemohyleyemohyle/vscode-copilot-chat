@@ -185,7 +185,12 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	// It excludes message content and request options which are captured separately
 
 	// Extract headerRequestId to check for uniqueness
-	const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
+	const headerRequestId = telemetryData.properties.headerRequestId;
+	if (!headerRequestId) {
+		logService?.debug('[model.request.added] Skipping telemetry - no headerRequestId found');
+		return;
+	}
+
 	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
 
 	// Check if we've already processed this headerRequestId
