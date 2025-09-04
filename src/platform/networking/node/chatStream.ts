@@ -112,6 +112,12 @@ const requestOptionsHashToId = new LRUCache<string, string>(500);
 // LRU cache to track processed headerRequestIds to ensure model.request.added is sent only once per headerRequestId (limit: 1000 entries)
 const processedHeaderRequestIds = new LRUCache<string, boolean>(1000);
 
+// Track most recent conversation headerRequestId and turn count for linking supplementary calls
+const conversationTracker: { headerRequestId: string | null; turnCount: number } = {
+	headerRequestId: null,
+	turnCount: 0
+};
+
 // ===== MODEL TELEMETRY FUNCTIONS =====
 // These functions send 'model...' events and are grouped together for better organization
 
@@ -207,6 +213,28 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	for (const [key, value] of Object.entries(telemetryData.properties)) {
 		if (!key.startsWith('message') && !key.startsWith('request.option') && key !== 'modelCallId') {
 			filteredProperties[key] = value;
+		}
+	}
+
+	// Check if this is a conversation mode (has conversationId) or supplementary mode
+	const conversationId = telemetryData.properties.conversationId;
+	if (conversationId) {
+		// Conversation mode: update tracker with current headerRequestId
+		if (conversationTracker.headerRequestId === headerRequestId) {
+			// Same headerRequestId, increment turn count
+			conversationTracker.turnCount++;
+		} else {
+			// New headerRequestId, reset tracker
+			conversationTracker.headerRequestId = headerRequestId;
+			conversationTracker.turnCount = 1;
+		}
+		logService?.debug(`[model.request.added] Conversation mode - updated tracker: headerRequestId=${headerRequestId}, turnCount=${conversationTracker.turnCount}`);
+	} else {
+		// Supplementary mode: add conversation linking fields if we have tracked data
+		if (conversationTracker.headerRequestId) {
+			filteredProperties.mostRecentConversationHeaderRequestId = conversationTracker.headerRequestId;
+			filteredProperties.mostRecentConversationHeaderRequestIdTurn = conversationTracker.turnCount.toString();
+			logService?.debug(`[model.request.added] Supplementary mode - linking to conversation: mostRecentConversationHeaderRequestId=${conversationTracker.headerRequestId}, turn=${conversationTracker.turnCount}`);
 		}
 	}
 
