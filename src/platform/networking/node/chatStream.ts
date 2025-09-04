@@ -61,11 +61,43 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 		return processedMsg;
 	});
 
-	const telemetryDataWithPrompt = telemetryData.extendedBy({
+	// Process properties to replace request.option.tools.* field values with their length
+	const processedProperties: { [key: string]: string } = {};
+	for (const [key, value] of Object.entries(telemetryData.properties)) {
+		if (key.startsWith('request.option.tools')) {
+			// Replace the content with its length
+			if (typeof value === 'string') {
+				// If it's a string, it might be a JSON array, try to parse it
+				try {
+					const parsed = JSON.parse(value);
+					if (Array.isArray(parsed)) {
+						processedProperties[key] = parsed.length.toString();
+					} else {
+						processedProperties[key] = value.length.toString();
+					}
+				} catch {
+					// If parsing fails, just use string length
+					processedProperties[key] = value.length.toString();
+				}
+			} else if (Array.isArray(value)) {
+				processedProperties[key] = (value as any[]).length.toString();
+			} else {
+				processedProperties[key] = '0';
+			}
+		} else {
+			processedProperties[key] = value;
+		}
+	}
+
+	const telemetryDataWithPrompt = TelemetryData.createAndMarkAsIssued({
+		...processedProperties,
 		messagesJson: JSON.stringify(messagesWithLength),
 		message_direction: messageType,
 		modelCallId: modelCallId, // Include at telemetry event level too
-	});
+	}, telemetryData.measurements);
+
+	// Log engine.messages.length telemetry
+	logService?.info(`[engine.messages.length] ${messageType} modelCallId: ${modelCallId}, messages: ${messages.length}, properties: ${JSON.stringify(telemetryDataWithPrompt.properties)}, measurements: ${JSON.stringify(telemetryDataWithPrompt.measurements)}`);
 
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
