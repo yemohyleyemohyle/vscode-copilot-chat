@@ -5,6 +5,7 @@
 
 import * as vscode from 'vscode';
 import { getExperimentationService, IExperimentationFilterProvider, TargetPopulation } from 'vscode-tas-client';
+import { isObject } from '../../../util/vs/base/common/types';
 import { ICopilotTokenStore } from '../../authentication/common/copilotTokenStore';
 import { IConfigurationService } from '../../configuration/common/configurationService';
 import { IEnvService } from '../../env/common/envService';
@@ -146,10 +147,79 @@ export class MicrosoftExperimentationService extends BaseExperimentationService 
 		const id = context.extension.id;
 		const version = context.extension.packageJSON['version'];
 		const targetPopulation = getTargetPopulation(envService.isPreRelease());
-		const delegateFn = (globalState: any, userInfoStore: UserInfoStore) => {
-			return getExperimentationService(id, version, targetPopulation, telemetryService, globalState, new GithubAccountFilterProvider(userInfoStore, logService), new RelatedExtensionsFilterProvider(logService), new CopilotExtensionsFilterProvider(logService), new CopilotCompletionsFilterProvider(() => this.getCompletionsFilters(), logService));
+		let self: MicrosoftExperimentationService | undefined = undefined;
+		const delegateFn = (globalState: vscode.Memento, userInfoStore: UserInfoStore) => {
+			const wrappedMemento = new ExpMementoWrapper(globalState, envService);
+			return getExperimentationService(
+				id,
+				version,
+				targetPopulation,
+				telemetryService,
+				wrappedMemento,
+				new GithubAccountFilterProvider(userInfoStore, logService),
+				new RelatedExtensionsFilterProvider(logService),
+				new CopilotExtensionsFilterProvider(logService),
+				// The callback is called in super ctor. At that time, self/this is not initialized yet (but also, no filter could have been possibly set).
+				new CopilotCompletionsFilterProvider(() => self?.getCompletionsFilters() ?? new Map(), logService)
+			);
 		};
 
 		super(delegateFn, context, copilotTokenStore, configurationService, logService);
+
+		self = this; // This is now fully initialized.
 	}
+}
+
+class ExpMementoWrapper implements vscode.Memento {
+
+	constructor(
+		private readonly _actual: vscode.Memento,
+		@IEnvService private readonly _envService: IEnvService
+	) {
+	}
+
+	keys(): readonly string[] {
+		return this._actual.keys();
+	}
+
+	get<T>(key: string): T | undefined;
+	get<T>(key: string, defaultValue: T): T;
+	get<T>(key: string, defaultValue?: T): T | undefined {
+		const value = this._actual.get(key, defaultValue);
+		if (!isWrappedExpValue(value)) {
+			return defaultValue;
+		}
+		if (value.extensionVersion !== this._envService.getVersion()) {
+			// The extension has been updated since this value was stored, so ignore it.
+			return defaultValue;
+		}
+		const age = (new Date()).getTime() - (new Date(value.savedDateTime)).getTime();
+		const maxAge = 1000 * 60 * 60 * 24 * 3; // 3 days
+		if (age > maxAge) {
+			// The value is too old, so ignore it.
+			return defaultValue;
+		}
+		return value.value as T;
+	}
+
+	update(key: string, value: any): Thenable<void> {
+		const wrapped: IWrappedExpValue = {
+			$$$isWrappedExpValue: true,
+			savedDateTime: (new Date()).toISOString(),
+			extensionVersion: this._envService.getVersion(),
+			value
+		};
+		return this._actual.update(key, wrapped);
+	}
+}
+
+function isWrappedExpValue(obj: unknown): obj is IWrappedExpValue {
+	return isObject(obj) && '$$$isWrappedExpValue' in obj;
+}
+
+interface IWrappedExpValue {
+	$$$isWrappedExpValue: true;
+	savedDateTime: string;
+	extensionVersion: string;
+	value: any;
 }
