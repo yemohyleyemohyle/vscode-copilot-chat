@@ -199,6 +199,22 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 
 	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
 
+	// Check if this is a conversation mode (has conversationId) or supplementary mode
+	// This must be done BEFORE the duplicate check to ensure tracker is always updated
+	const conversationId = telemetryData.properties.conversationId;
+	if (conversationId) {
+		// Conversation mode: update tracker with current headerRequestId
+		if (conversationTracker.headerRequestId === headerRequestId) {
+			// Same headerRequestId, increment turn count
+			conversationTracker.turnCount++;
+		} else {
+			// New headerRequestId, reset tracker
+			conversationTracker.headerRequestId = headerRequestId;
+			conversationTracker.turnCount = 1;
+		}
+		logService?.debug(`[model.request.added] Conversation mode - updated tracker: headerRequestId=${headerRequestId}, turnCount=${conversationTracker.turnCount}`);
+	}
+
 	// Check if we've already processed this headerRequestId
 	if (processedHeaderRequestIds.has(headerRequestId)) {
 		logService?.debug(`[model.request.added] Skipping duplicate headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}`);
@@ -216,26 +232,11 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 		}
 	}
 
-	// Check if this is a conversation mode (has conversationId) or supplementary mode
-	const conversationId = telemetryData.properties.conversationId;
-	if (conversationId) {
-		// Conversation mode: update tracker with current headerRequestId
-		if (conversationTracker.headerRequestId === headerRequestId) {
-			// Same headerRequestId, increment turn count
-			conversationTracker.turnCount++;
-		} else {
-			// New headerRequestId, reset tracker
-			conversationTracker.headerRequestId = headerRequestId;
-			conversationTracker.turnCount = 1;
-		}
-		logService?.debug(`[model.request.added] Conversation mode - updated tracker: headerRequestId=${headerRequestId}, turnCount=${conversationTracker.turnCount}`);
-	} else {
-		// Supplementary mode: add conversation linking fields if we have tracked data
-		if (conversationTracker.headerRequestId) {
-			filteredProperties.mostRecentConversationHeaderRequestId = conversationTracker.headerRequestId;
-			filteredProperties.mostRecentConversationHeaderRequestIdTurn = conversationTracker.turnCount.toString();
-			logService?.debug(`[model.request.added] Supplementary mode - linking to conversation: mostRecentConversationHeaderRequestId=${conversationTracker.headerRequestId}, turn=${conversationTracker.turnCount}`);
-		}
+	// For supplementary mode: add conversation linking fields if we have tracked data
+	if (!conversationId && conversationTracker.headerRequestId) {
+		filteredProperties.mostRecentConversationHeaderRequestId = conversationTracker.headerRequestId;
+		filteredProperties.mostRecentConversationHeaderRequestIdTurn = conversationTracker.turnCount.toString();
+		logService?.debug(`[model.request.added] Supplementary mode - linking to conversation: mostRecentConversationHeaderRequestId=${conversationTracker.headerRequestId}, turn=${conversationTracker.turnCount}`);
 	}
 
 	// Create telemetry data for the request
