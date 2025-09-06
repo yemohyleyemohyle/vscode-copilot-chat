@@ -252,20 +252,22 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 	const messageData: Array<{ uuid: string; headerRequestId: string }> = [];
 
 	for (const message of messages) {
-		// Create a hash of the message content to detect duplicates
+		// Extract context properties with fallbacks
+		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
+		const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
+
+		// Create a hash of the message content AND headerRequestId to detect duplicates
+		// Including headerRequestId ensures same message content with different headerRequestIds gets separate UUIDs
 		const messageHash = hash({
 			role: message.role,
 			content: message.content,
+			headerRequestId: headerRequestId, // Include headerRequestId in hash for proper deduplication
 			...(('tool_calls' in message && message.tool_calls) && { tool_calls: message.tool_calls }),
 			...(('tool_call_id' in message && message.tool_call_id) && { tool_call_id: message.tool_call_id })
 		}).toString();
 
-		// Get existing UUID for this message content, or generate a new one
+		// Get existing UUID for this message content + headerRequestId combination, or generate a new one
 		let messageUuid = messageHashToUuid.get(messageHash);
-
-		// Extract context properties with fallbacks
-		const conversationId = telemetryData.properties.conversationId || telemetryData.properties.sessionId || 'unknown';
-		const headerRequestId = telemetryData.properties.headerRequestId || 'unknown';
 
 		if (!messageUuid) {
 			// This is a new message, generate UUID and send the event
