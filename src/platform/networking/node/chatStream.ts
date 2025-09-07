@@ -371,8 +371,11 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 	for (const [headerRequestId, messageUuids] of messagesByHeaderRequestId) {
 		const eventName = messageDirection === 'input' ? 'model.modelCall.input' : 'model.modelCall.output';
 
-		// Update headerRequestIdTracker and get requestTurn for temporal location tracking
-		const requestTurn = updateHeaderRequestIdTracker(headerRequestId);
+		// Update headerRequestIdTracker and get requestTurn only for input events
+		let requestTurn: number | undefined;
+		if (messageDirection === 'input') {
+			requestTurn = updateHeaderRequestIdTracker(headerRequestId);
+		}
 
 		// Convert messageUuids to JSON string for chunking
 		const messageUuidsJsonString = JSON.stringify(messageUuids);
@@ -395,7 +398,7 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 				chunkIndex: chunkIndex.toString(), // 0-based chunk index for ordering
 				totalChunks: chunks.length.toString(), // Total number of chunks for this headerRequestId
 				messageCount: messageUuids.length.toString(),
-				requestTurn: requestTurn.toString(), // Add requestTurn for temporal location tracking along main agent flow
+				...(requestTurn !== undefined && { requestTurn: requestTurn.toString() }), // Add requestTurn only for input calls
 				...(requestOptionsId && { requestOptionsId }), // Add requestOptionsId for input calls
 				...(telemetryData.properties.turnIndex && { turnIndex: telemetryData.properties.turnIndex }), // Add turnIndex from original telemetryData
 			}, telemetryData.measurements); // Include measurements from original telemetryData
@@ -404,7 +407,7 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 
 			// Log model call telemetry
 			const requestOptionsLog = requestOptionsId ? `, requestOptionsId: ${requestOptionsId}` : '';
-			logService?.info(`[${eventName}] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}, requestTurn: ${requestTurn}${requestOptionsLog}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
+			logService?.info(`[${eventName}] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}${requestOptionsLog}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
 		}
 	}
 }
