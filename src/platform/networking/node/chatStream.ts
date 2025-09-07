@@ -112,11 +112,34 @@ const requestOptionsHashToId = new LRUCache<string, string>(500);
 // LRU cache to track processed headerRequestIds to ensure model.request.added is sent only once per headerRequestId (limit: 1000 entries)
 const processedHeaderRequestIds = new LRUCache<string, boolean>(1000);
 
+// LRU cache to track headerRequestId to requestTurn mapping for temporal location tracking along main agent flow (limit: 100 entries)
+const headerRequestIdTracker = new LRUCache<string, number>(100);
+
 // Track most recent conversation headerRequestId and turn count for linking supplementary calls
 const mainHeaderRequestIdTracker: { headerRequestId: string | null; turnCount: number } = {
 	headerRequestId: null,
 	turnCount: 0
 };
+
+/**
+ * Updates the headerRequestIdTracker with the given headerRequestId.
+ * If the headerRequestId already exists, increments its requestTurn.
+ * If it doesn't exist, adds it with requestTurn = 1.
+ * Returns the current requestTurn for the headerRequestId.
+ */
+function updateHeaderRequestIdTracker(headerRequestId: string): number {
+	const currentTurn = headerRequestIdTracker.get(headerRequestId);
+	if (currentTurn !== undefined) {
+		// HeaderRequestId exists, increment turn
+		const newTurn = currentTurn + 1;
+		headerRequestIdTracker.set(headerRequestId, newTurn);
+		return newTurn;
+	} else {
+		// New headerRequestId, set turn to 1
+		headerRequestIdTracker.set(headerRequestId, 1);
+		return 1;
+	}
+}
 
 // ===== MODEL TELEMETRY FUNCTIONS =====
 // These functions send 'model...' events and are grouped together for better organization
@@ -348,6 +371,9 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 	for (const [headerRequestId, messageUuids] of messagesByHeaderRequestId) {
 		const eventName = messageDirection === 'input' ? 'model.modelCall.input' : 'model.modelCall.output';
 
+		// Update headerRequestIdTracker and get requestTurn for temporal location tracking
+		const requestTurn = updateHeaderRequestIdTracker(headerRequestId);
+
 		// Convert messageUuids to JSON string for chunking
 		const messageUuidsJsonString = JSON.stringify(messageUuids);
 		const maxChunkSize = 8000;
@@ -369,6 +395,7 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 				chunkIndex: chunkIndex.toString(), // 0-based chunk index for ordering
 				totalChunks: chunks.length.toString(), // Total number of chunks for this headerRequestId
 				messageCount: messageUuids.length.toString(),
+				requestTurn: requestTurn.toString(), // Add requestTurn for temporal location tracking along main agent flow
 				...(requestOptionsId && { requestOptionsId }), // Add requestOptionsId for input calls
 				...(telemetryData.properties.turnIndex && { turnIndex: telemetryData.properties.turnIndex }), // Add turnIndex from original telemetryData
 			}, telemetryData.measurements); // Include measurements from original telemetryData
@@ -377,7 +404,7 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 
 			// Log model call telemetry
 			const requestOptionsLog = requestOptionsId ? `, requestOptionsId: ${requestOptionsId}` : '';
-			logService?.info(`[${eventName}] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}${requestOptionsLog}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
+			logService?.info(`[${eventName}] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}, requestTurn: ${requestTurn}${requestOptionsLog}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
 		}
 	}
 }
