@@ -113,7 +113,7 @@ const requestOptionsHashToId = new LRUCache<string, string>(500);
 const processedHeaderRequestIds = new LRUCache<string, boolean>(1000);
 
 // Track most recent conversation headerRequestId and turn count for linking supplementary calls
-const conversationTracker: { headerRequestId: string | null; turnCount: number } = {
+const mainHeaderRequestIdTracker: { headerRequestId: string | null; turnCount: number } = {
 	headerRequestId: null,
 	turnCount: 0
 };
@@ -204,15 +204,15 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	const conversationId = telemetryData.properties.conversationId;
 	if (conversationId) {
 		// Conversation mode: update tracker with current headerRequestId
-		if (conversationTracker.headerRequestId === headerRequestId) {
+		if (mainHeaderRequestIdTracker.headerRequestId === headerRequestId) {
 			// Same headerRequestId, increment turn count
-			conversationTracker.turnCount++;
+			mainHeaderRequestIdTracker.turnCount++;
 		} else {
 			// New headerRequestId, reset tracker
-			conversationTracker.headerRequestId = headerRequestId;
-			conversationTracker.turnCount = 1;
+			mainHeaderRequestIdTracker.headerRequestId = headerRequestId;
+			mainHeaderRequestIdTracker.turnCount = 1;
 		}
-		logService?.debug(`[model.request.added] Conversation mode - updated tracker: headerRequestId=${headerRequestId}, turnCount=${conversationTracker.turnCount}`);
+		logService?.debug(`[model.request.added] Conversation mode - updated tracker: headerRequestId=${headerRequestId}, turnCount=${mainHeaderRequestIdTracker.turnCount}`);
 	}
 
 	// Check if we've already processed this headerRequestId
@@ -233,10 +233,10 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	}
 
 	// For supplementary mode: add conversation linking fields if we have tracked data
-	if (!conversationId && conversationTracker.headerRequestId) {
-		filteredProperties.mostRecentConversationHeaderRequestId = conversationTracker.headerRequestId;
-		filteredProperties.mostRecentConversationHeaderRequestIdTurn = conversationTracker.turnCount.toString();
-		logService?.debug(`[model.request.added] Supplementary mode - linking to conversation: mostRecentConversationHeaderRequestId=${conversationTracker.headerRequestId}, turn=${conversationTracker.turnCount}`);
+	if (!conversationId && mainHeaderRequestIdTracker.headerRequestId) {
+		filteredProperties.mostRecentConversationHeaderRequestId = mainHeaderRequestIdTracker.headerRequestId;
+		filteredProperties.mostRecentConversationHeaderRequestIdTurn = mainHeaderRequestIdTracker.turnCount.toString();
+		logService?.debug(`[model.request.added] Supplementary mode - linking to conversation: mostRecentConversationHeaderRequestId=${mainHeaderRequestIdTracker.headerRequestId}, turn=${mainHeaderRequestIdTracker.turnCount}`);
 	}
 
 	// Create telemetry data for the request
