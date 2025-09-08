@@ -109,16 +109,18 @@ const messageHashToUuid = new LRUCache<string, string>(1000);
 // LRU cache from request options hash to requestOptionsId to ensure same options get same ID (limit: 500 entries)
 const requestOptionsHashToId = new LRUCache<string, string>(500);
 
-// LRU cache to track processed headerRequestIds to ensure model.request.added is sent only once per headerRequestId (limit: 1000 entries)
-const processedHeaderRequestIds = new LRUCache<string, boolean>(1000);
+// LRU cache to track headerRequestId to requestTurn mapping for temporal location tracking along main agent flow (limit: 1000 entries)
+const headerRequestIdTracker = new LRUCache<string, number>(1000);
 
-// LRU cache to track headerRequestId to requestTurn mapping for temporal location tracking along main agent flow (limit: 100 entries)
-const headerRequestIdTracker = new LRUCache<string, number>(100);
+// Track most recent conversation headerRequestId for linking supplementary calls
+const mainHeaderRequestIdTracker: { headerRequestId: string | null } = {
+	headerRequestId: null
+};
 
-// Track most recent conversation headerRequestId and turn count for linking supplementary calls
-const mainHeaderRequestIdTracker: { headerRequestId: string | null; turnCount: number } = {
-	headerRequestId: null,
-	turnCount: 0
+// Track conversation turns for model.request.added events
+const conversationTracker: { conversationId: string | null; conversationTurn: number } = {
+	conversationId: null,
+	conversationTurn: 0
 };
 
 /**
@@ -139,6 +141,24 @@ function updateHeaderRequestIdTracker(headerRequestId: string): number {
 		headerRequestIdTracker.set(headerRequestId, 1);
 		return 1;
 	}
+}
+
+/**
+ * Updates the conversationTracker with the given conversationId.
+ * If the conversationId is different from the one stored, resets to turn 1.
+ * If it's the same conversationId, increments the turn.
+ * Returns the current conversationTurn for the conversationId.
+ */
+function updateConversationTracker(conversationId: string): number {
+	if (conversationTracker.conversationId === conversationId) {
+		// Same conversation, increment turn
+		conversationTracker.conversationTurn++;
+	} else {
+		// New conversation, reset tracker
+		conversationTracker.conversationId = conversationId;
+		conversationTracker.conversationTurn = 1;
+	}
+	return conversationTracker.conversationTurn;
 }
 
 // ===== MODEL TELEMETRY FUNCTIONS =====
@@ -227,25 +247,22 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	const conversationId = telemetryData.properties.conversationId;
 	if (conversationId) {
 		// Conversation mode: update tracker with current headerRequestId
-		if (mainHeaderRequestIdTracker.headerRequestId === headerRequestId) {
-			// Same headerRequestId, increment turn count
-			mainHeaderRequestIdTracker.turnCount++;
-		} else {
-			// New headerRequestId, reset tracker
-			mainHeaderRequestIdTracker.headerRequestId = headerRequestId;
-			mainHeaderRequestIdTracker.turnCount = 1;
-		}
-		logService?.debug(`[model.request.added] Conversation mode - updated tracker: headerRequestId=${headerRequestId}, turnCount=${mainHeaderRequestIdTracker.turnCount}`);
+		mainHeaderRequestIdTracker.headerRequestId = headerRequestId;
+		logService?.debug(`[model.request.added] Conversation mode - updated tracker: headerRequestId=${headerRequestId}`);
 	}
 
 	// Check if we've already processed this headerRequestId
-	if (processedHeaderRequestIds.has(headerRequestId)) {
+	if (headerRequestIdTracker.has(headerRequestId)) {
 		logService?.debug(`[model.request.added] Skipping duplicate headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}`);
 		return;
 	}
 
-	// Mark this headerRequestId as processed
-	processedHeaderRequestIds.set(headerRequestId, true);
+	// Update conversation tracker and get conversation turn only for new headerRequestIds
+	let conversationTurn: number | undefined;
+	if (conversationId) {
+		conversationTurn = updateConversationTracker(conversationId);
+		logService?.debug(`[model.request.added] Conversation mode - updated conversation tracker: conversationId=${conversationId}, conversationTurn=${conversationTurn}`);
+	}
 
 	// Filter out properties that start with "message" or "request.option" and exclude modelCallId
 	const filteredProperties: { [key: string]: string } = {};
@@ -255,11 +272,19 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 		}
 	}
 
+	// Add conversationTurn if conversationId is present
+	if (conversationTurn !== undefined) {
+		filteredProperties.conversationTurn = conversationTurn.toString();
+	}
+
 	// For supplementary mode: add conversation linking fields if we have tracked data
 	if (!conversationId && mainHeaderRequestIdTracker.headerRequestId) {
+		const mostRecentTurn = headerRequestIdTracker.get(mainHeaderRequestIdTracker.headerRequestId);
 		filteredProperties.mostRecentConversationHeaderRequestId = mainHeaderRequestIdTracker.headerRequestId;
-		filteredProperties.mostRecentConversationHeaderRequestIdTurn = mainHeaderRequestIdTracker.turnCount.toString();
-		logService?.debug(`[model.request.added] Supplementary mode - linking to conversation: mostRecentConversationHeaderRequestId=${mainHeaderRequestIdTracker.headerRequestId}, turn=${mainHeaderRequestIdTracker.turnCount}`);
+		if (mostRecentTurn !== undefined) {
+			filteredProperties.mostRecentConversationHeaderRequestIdTurn = mostRecentTurn.toString();
+		}
+		logService?.debug(`[model.request.added] Supplementary mode - linking to conversation: mostRecentConversationHeaderRequestId=${mainHeaderRequestIdTracker.headerRequestId}${mostRecentTurn !== undefined ? `, turn=${mostRecentTurn}` : ' (no turn found)'}`);
 	}
 
 	// Create telemetry data for the request
