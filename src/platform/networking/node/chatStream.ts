@@ -96,9 +96,6 @@ export function sendEngineMessagesLengthTelemetry(telemetryService: ITelemetrySe
 		modelCallId: modelCallId, // Include at telemetry event level too
 	}, telemetryData.measurements);
 
-	// Log engine.messages.length telemetry
-	logService?.info(`[engine.messages.length] ${messageType} modelCallId: ${modelCallId}, messages: ${messages.length}, properties: ${JSON.stringify(telemetryDataWithPrompt.properties)}, measurements: ${JSON.stringify(telemetryDataWithPrompt.measurements)}`);
-
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages.length', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 }
@@ -175,7 +172,6 @@ function sendModelRequestOptionsTelemetry(telemetryService: ITelemetryService, t
 
 	// Only process if there are request options
 	if (Object.keys(requestOptions).length === 0) {
-		logService?.debug('[TELEMETRY] No request options found, skipping model.request.options processing');
 		return undefined;
 	}
 
@@ -194,7 +190,6 @@ function sendModelRequestOptionsTelemetry(telemetryService: ITelemetryService, t
 		requestOptionsHashToId.set(requestOptionsHash, requestOptionsId);
 	} else {
 		// Skip sending model.request.options.added if this exact request options have already been logged
-		logService?.debug(`[model.request.options.added] Reusing existing requestOptionsId ${requestOptionsId} for duplicate request options`);
 		return requestOptionsId;
 	}
 
@@ -220,9 +215,6 @@ function sendModelRequestOptionsTelemetry(telemetryService: ITelemetryService, t
 		}, telemetryData.measurements); // Include measurements from original telemetryData
 
 		telemetryService.sendInternalMSFTTelemetryEvent('model.request.options.added', requestOptionsData.properties, requestOptionsData.measurements);
-
-		// Log request options telemetry
-		logService?.info(`[model.request.options.added] chunk ${chunkIndex + 1}/${chunks.length} requestOptionsId: ${requestOptionsId}, headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(requestOptionsData.properties)}, measurements: ${JSON.stringify(requestOptionsData.measurements)}`);
 	}
 
 	return requestOptionsId;
@@ -236,7 +228,6 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	// Extract headerRequestId to check for uniqueness
 	const headerRequestId = telemetryData.properties.headerRequestId;
 	if (!headerRequestId) {
-		logService?.debug('[model.request.added] Skipping telemetry - no headerRequestId found');
 		return;
 	}
 
@@ -246,12 +237,10 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	if (conversationId) {
 		// Conversation mode: update tracker with current headerRequestId
 		mainHeaderRequestIdTracker.headerRequestId = headerRequestId;
-		logService?.debug(`[model.request.added] Conversation mode - updated tracker: headerRequestId=${headerRequestId}`);
 	}
 
 	// Check if we've already processed this headerRequestId
 	if (headerRequestIdTracker.has(headerRequestId)) {
-		logService?.debug(`[model.request.added] Skipping duplicate headerRequestId: ${headerRequestId}`);
 		return;
 	}
 
@@ -259,7 +248,6 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	let conversationTurn: number | undefined;
 	if (conversationId) {
 		conversationTurn = updateConversationTracker(conversationId);
-		logService?.debug(`[model.request.added] Conversation mode - updated conversation tracker: conversationId=${conversationId}, conversationTurn=${conversationTurn}`);
 	}
 
 	// Filter out properties that start with "message" or "request.option" and exclude modelCallId
@@ -282,16 +270,12 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 		if (mostRecentTurn !== undefined) {
 			filteredProperties.mostRecentConversationHeaderRequestIdTurn = mostRecentTurn.toString();
 		}
-		logService?.debug(`[model.request.added] Supplementary mode - linking to conversation: mostRecentConversationHeaderRequestId=${mainHeaderRequestIdTracker.headerRequestId}${mostRecentTurn !== undefined ? `, turn=${mostRecentTurn}` : ' (no turn found)'}`);
 	}
 
 	// Create telemetry data for the request
 	const requestData = TelemetryData.createAndMarkAsIssued(filteredProperties, telemetryData.measurements);
 
 	telemetryService.sendInternalMSFTTelemetryEvent('model.request.added', requestData.properties, requestData.measurements);
-
-	// Log request telemetry
-	logService?.info(`[model.request.added] headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(requestData.properties)}, measurements: ${JSON.stringify(requestData.measurements)}`);
 }
 
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string; headerRequestId: string }> {
@@ -324,7 +308,6 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 			messageData.push({ uuid: messageUuid, headerRequestId });
 
 			// Skip sending model.message.added if this exact message has already been logged
-			logService?.debug(`[model.message.added] Reusing existing UUID ${messageUuid} for duplicate message content: ${message.role}`);
 			continue;
 		}
 
@@ -354,9 +337,6 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 			}, telemetryData.measurements); // Include measurements from original telemetryData
 
 			telemetryService.sendInternalMSFTTelemetryEvent('model.message.added', messageData.properties, messageData.measurements);
-
-			// Log entire messageData as JSON (both properties and measurements)
-			logService?.info(`[model.message.added] chunk ${chunkIndex + 1}/${chunks.length} properties: ${JSON.stringify(messageData.properties)}, measurements: ${JSON.stringify(messageData.measurements)}`);
 		}
 	}
 
@@ -367,7 +347,6 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 	// Get the unique model call ID
 	const modelCallId = telemetryData.properties.modelCallId as string;
 	if (!modelCallId) {
-		logService?.warn('[TELEMETRY] modelCallId not found in telemetryData, cannot send model.modelCall event');
 		return;
 	}
 
@@ -427,10 +406,6 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 			}, telemetryData.measurements); // Include measurements from original telemetryData
 
 			telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);
-
-			// Log model call telemetry
-			const requestOptionsLog = requestOptionsId ? `, requestOptionsId: ${requestOptionsId}` : '';
-			logService?.info(`[${eventName}] chunk ${chunkIndex + 1}/${chunks.length} modelCallId: ${modelCallId}, ${messageDirection}: ${messageUuids.length} messages, headerRequestId: ${headerRequestId}${requestOptionsLog}, properties: ${JSON.stringify(modelCallData.properties)}, measurements: ${JSON.stringify(modelCallData.measurements)}`);
 		}
 	}
 }
@@ -439,7 +414,6 @@ function sendModelTelemetryEvents(telemetryService: ITelemetryService, messages:
 	// Skip model telemetry events for XtabProvider and api.* message sources
 	const messageSource = telemetryData.properties.messageSource as string;
 	if (messageSource === 'XtabProvider' || (messageSource && messageSource.startsWith('api.'))) {
-		logService?.debug(`[TELEMETRY] Skipping model telemetry events for messageSource: ${messageSource}`);
 		return;
 	}
 
@@ -454,7 +428,6 @@ function sendModelTelemetryEvents(telemetryService: ITelemetryService, messages:
 	// Retry requests are identified by the presence of retryAfterFilterCategory property
 	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
 	if (!isOutput && isRetryRequest) {
-		logService?.debug('[TELEMETRY] Skipping input message telemetry (model.message.added, model.modelCall.input, model.request.options.added) for retry request to avoid duplicates');
 		return;
 	}
 
