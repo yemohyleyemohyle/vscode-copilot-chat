@@ -9,6 +9,7 @@ import { editsAgentName, getChatParticipantIdFromName } from '../../../platform/
 import { ChatLocation } from '../../../platform/chat/common/commonTypes';
 import { EditSurvivalResult } from '../../../platform/editSurvivalTracking/common/editSurvivalReporter';
 import { ILanguageDiagnosticsService } from '../../../platform/languages/common/languageDiagnosticsService';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IMultiFileEditInternalTelemetryService } from '../../../platform/multiFileEdit/common/multiFileEditQualityTelemetry';
 import { INotebookService } from '../../../platform/notebook/common/notebookService';
 import { ISurveyService } from '../../../platform/survey/common/surveyService';
@@ -45,7 +46,8 @@ export class UserFeedbackService implements IUserFeedbackService {
 		@ISurveyService private readonly surveyService: ISurveyService,
 		@ILanguageDiagnosticsService private readonly languageDiagnosticsService: ILanguageDiagnosticsService,
 		@IMultiFileEditInternalTelemetryService private readonly multiFileEditTelemetryService: IMultiFileEditInternalTelemetryService,
-		@INotebookService private readonly notebookService: INotebookService
+		@INotebookService private readonly notebookService: INotebookService,
+		@ILogService private readonly logService: ILogService
 	) { }
 
 	handleUserAction(e: vscode.ChatUserActionEvent, agentId: string): void {
@@ -188,7 +190,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 						isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0
 					});
 
-					console.log('[INTERNAL_TELEMETRY] panel.edit.feedback', {
+					this.logService.info(`[INTERNAL_TELEMETRY] panel.edit.feedback: ${JSON.stringify({
 						properties: {
 							languageId: document?.languageId,
 							requestId: result.metadata?.responseId,
@@ -201,7 +203,7 @@ export class UserFeedbackService implements IUserFeedbackService {
 							isNotebook: this.notebookService.hasSupportedNotebooks(e.action.uri) ? 1 : 0,
 							isNotebookCell: e.action.uri.scheme === Schemas.vscodeNotebookCell ? 1 : 0
 						}
-					});
+					})}`);
 
 					if (result.metadata?.responseId
 						&& (e.action.outcome === vscode.ChatEditingSessionActionOutcome.Accepted
