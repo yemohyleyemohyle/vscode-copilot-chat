@@ -240,8 +240,6 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 		return;
 	}
 
-	const isRetryRequest = telemetryData.properties.retryAfterFilterCategory !== undefined;
-
 	// Check if this is a conversation mode (has conversationId) or supplementary mode
 	// This must be done BEFORE the duplicate check to ensure tracker is always updated
 	const conversationId = telemetryData.properties.conversationId;
@@ -253,7 +251,7 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 
 	// Check if we've already processed this headerRequestId
 	if (headerRequestIdTracker.has(headerRequestId)) {
-		logService?.debug(`[model.request.added] Skipping duplicate headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}`);
+		logService?.debug(`[model.request.added] Skipping duplicate headerRequestId: ${headerRequestId}`);
 		return;
 	}
 
@@ -293,7 +291,7 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	telemetryService.sendInternalMSFTTelemetryEvent('model.request.added', requestData.properties, requestData.measurements);
 
 	// Log request telemetry
-	logService?.info(`[model.request.added] headerRequestId: ${headerRequestId}${isRetryRequest ? ' (retry request)' : ''}, properties: ${JSON.stringify(requestData.properties)}, measurements: ${JSON.stringify(requestData.measurements)}`);
+	logService?.info(`[model.request.added] headerRequestId: ${headerRequestId}, properties: ${JSON.stringify(requestData.properties)}, measurements: ${JSON.stringify(requestData.measurements)}`);
 }
 
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string; headerRequestId: string }> {
