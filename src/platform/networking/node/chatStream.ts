@@ -114,11 +114,8 @@ const mainHeaderRequestIdTracker: { headerRequestId: string | null } = {
 	headerRequestId: null
 };
 
-// Track conversation turns for model.request.added events
-const conversationTracker: { conversationId: string | null; conversationTurn: number } = {
-	conversationId: null,
-	conversationTurn: 0
-};
+// Track conversation turns for model.request.added events (limit: 100 entries)
+const conversationTracker = new LRUCache<string, number>(100);
 
 /**
  * Updates the headerRequestIdTracker with the given headerRequestId.
@@ -142,20 +139,22 @@ function updateHeaderRequestIdTracker(headerRequestId: string): number {
 
 /**
  * Updates the conversationTracker with the given conversationId.
- * If the conversationId is different from the one stored, resets to turn 1.
- * If it's the same conversationId, increments the turn.
+ * If the conversationId already exists, increments its turn.
+ * If it doesn't exist, adds it with turn = 1.
  * Returns the current conversationTurn for the conversationId.
  */
 function updateConversationTracker(conversationId: string): number {
-	if (conversationTracker.conversationId === conversationId) {
-		// Same conversation, increment turn
-		conversationTracker.conversationTurn++;
+	const currentTurn = conversationTracker.get(conversationId);
+	if (currentTurn !== undefined) {
+		// ConversationId exists, increment turn
+		const newTurn = currentTurn + 1;
+		conversationTracker.set(conversationId, newTurn);
+		return newTurn;
 	} else {
-		// New conversation, reset tracker
-		conversationTracker.conversationId = conversationId;
-		conversationTracker.conversationTurn = 1;
+		// New conversationId, set turn to 1
+		conversationTracker.set(conversationId, 1);
+		return 1;
 	}
-	return conversationTracker.conversationTurn;
 }
 
 // ===== MODEL TELEMETRY FUNCTIONS =====
