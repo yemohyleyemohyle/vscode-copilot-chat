@@ -446,7 +446,7 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 		messagesJson: JSON.stringify(messages),
 	});
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
-	telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
+	//telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
 
 	// Send all model telemetry events (model.request.added, model.message.added, model.modelCall.input/output, model.request.options.added)
 	// Comment out the line below to disable the new deduplicated model telemetry events
