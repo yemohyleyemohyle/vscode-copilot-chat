@@ -464,6 +464,37 @@ export function prepareChatCompletionForReturn(
 	c: FinishedCompletion,
 	telemetryData: TelemetryData
 ): ChatCompletion {
+	// DEBUG: Log entire FinishedCompletion object to see available fields
+	try {
+		const debugObj = {
+			index: c.index,
+			reason: c.reason,
+			filterReason: c.filterReason,
+			finishOffset: c.finishOffset,
+			hasUsage: !!c.usage,
+			usageDetails: c.usage,
+			solutionKeys: Object.keys(c.solution),
+			solutionTextLength: c.solution.text.length,
+			allCompletionKeys: Object.keys(c),
+			// Inspect the entire solution object to see if there's reasoning data
+			fullSolution: JSON.parse(JSON.stringify(c.solution)),
+		};
+		logService.info(`[DEBUG] FinishedCompletion structure: ${JSON.stringify(debugObj, null, 2)}`);
+
+		// Also log if there are any unexpected fields on the completion object
+		const unexpectedFields: any = {};
+		for (const key of Object.keys(c)) {
+			if (!['solution', 'finishOffset', 'reason', 'filterReason', 'error', 'usage', 'requestId', 'index'].includes(key)) {
+				unexpectedFields[key] = (c as any)[key];
+			}
+		}
+		if (Object.keys(unexpectedFields).length > 0) {
+			logService.info(`[DEBUG] Unexpected fields on FinishedCompletion: ${JSON.stringify(unexpectedFields, null, 2)}`);
+		}
+	} catch (e) {
+		logService.warn(`[DEBUG] Failed to stringify FinishedCompletion: ${e}`);
+	}
+
 	let messageContent = c.solution.text.join('');
 
 	let blockFinished = false;
