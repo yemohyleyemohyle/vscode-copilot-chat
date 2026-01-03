@@ -116,6 +116,31 @@ class StreamingToolCalls {
 	}
 }
 
+class StreamingReasoningContent {
+	private reasoningContent: string = '';
+
+	constructor() { }
+
+	update(delta: RawThinkingDelta | undefined) {
+		if (!delta) {
+			return;
+		}
+
+		// Only accumulate reasoning_content (GLM-specific field)
+		if (delta.reasoning_content) {
+			this.reasoningContent += delta.reasoning_content;
+		}
+	}
+
+	hasReasoningContent(): boolean {
+		return this.reasoningContent.length > 0;
+	}
+
+	getReasoningContent(): string | undefined {
+		return this.hasReasoningContent() ? this.reasoningContent : undefined;
+	}
+}
+
 // Given a string of lines separated by one or more newlines, returns complete
 // lines and any remaining partial line data. Exported for test only.
 export function splitChunk(chunk: string): [string[], string] {
@@ -141,6 +166,8 @@ export interface FinishedCompletion {
 	usage?: APIUsage;
 	requestId: RequestId;
 	index: number;
+	/** GLM-specific reasoning content accumulated from the stream */
+	reasoningContent?: string;
 }
 
 /** What comes back from the OpenAI API for a single choice in an SSE chunk. */
@@ -204,6 +231,7 @@ export class SSEProcessor {
 	private readonly completedFunctionCallIdxs: Map<number /* index */, 'function' | 'tool'> = new Map();
 	private readonly functionCalls: Record<string, APIJsonDataStreaming | null> = {};
 	private readonly toolCalls = new StreamingToolCalls();
+	private readonly reasoningContentAccumulator = new StreamingReasoningContent();
 	private functionCallName: string | undefined = undefined;
 
 	private constructor(
@@ -366,6 +394,7 @@ export class SSEProcessor {
 								reason: FinishedCompletionReason.ServerError,
 								error: json.error,
 								requestId: this.requestId,
+								reasoningContent: this.reasoningContentAccumulator.getReasoningContent(),
 							};
 						} else {
 							this.logService.error(`Unexpected response with no choices or error for request id ${this.requestId.headerRequestId}`);
@@ -400,6 +429,12 @@ export class SSEProcessor {
 
 
 					const thinkingDelta = extractThinkingDeltaFromChoice(choice);
+
+					// Accumulate GLM reasoning_content from delta or message
+					const rawThinkingDelta = choice.delta || choice.message;
+					if (rawThinkingDelta) {
+						this.reasoningContentAccumulator.update(rawThinkingDelta);
+					}
 
 					// Once we observe any thinking text or an id in this batch, keep the flag true
 					thinkingFound ||= !!(thinkingDelta?.text || thinkingDelta?.id);
@@ -552,6 +587,7 @@ export class SSEProcessor {
 						filterReason: choiceToFilterReason(choice),
 						requestId: this.requestId,
 						index: choice.index,
+						reasoningContent: this.reasoningContentAccumulator.getReasoningContent(),
 					};
 
 					if (this.maybeCancel('after yielding finished choice')) {
@@ -578,6 +614,7 @@ export class SSEProcessor {
 				reason: FinishedCompletionReason.ClientIterationDone,
 				requestId: this.requestId,
 				index: solutionIndex,
+				reasoningContent: this.reasoningContentAccumulator.getReasoningContent(),
 			};
 
 			if (this.maybeCancel('after yielding after iteration done')) {
@@ -620,6 +657,7 @@ export class SSEProcessor {
 					reason: this.completedFunctionCallIdxs.get(solutionIndex) === 'function' ? FinishedCompletionReason.FunctionCall : FinishedCompletionReason.ToolCalls,
 					requestId: this.requestId,
 					index: solutionIndex,
+					reasoningContent: this.reasoningContentAccumulator.getReasoningContent(),
 				};
 				continue;
 			}
@@ -629,6 +667,7 @@ export class SSEProcessor {
 				reason: FinishedCompletionReason.ClientDone,
 				requestId: this.requestId,
 				index: solutionIndex,
+				reasoningContent: this.reasoningContentAccumulator.getReasoningContent(),
 			};
 
 			if (this.maybeCancel('after yielding on DONE')) {

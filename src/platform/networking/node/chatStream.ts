@@ -484,12 +484,17 @@ export function prepareChatCompletionForReturn(
 		// Also log if there are any unexpected fields on the completion object
 		const unexpectedFields: any = {};
 		for (const key of Object.keys(c)) {
-			if (!['solution', 'finishOffset', 'reason', 'filterReason', 'error', 'usage', 'requestId', 'index'].includes(key)) {
+			if (!['solution', 'finishOffset', 'reason', 'filterReason', 'error', 'usage', 'requestId', 'index', 'reasoningContent'].includes(key)) {
 				unexpectedFields[key] = (c as any)[key];
 			}
 		}
 		if (Object.keys(unexpectedFields).length > 0) {
 			logService.info(`[DEBUG] Unexpected fields on FinishedCompletion: ${JSON.stringify(unexpectedFields, null, 2)}`);
+		}
+
+		// Log reasoning_content specifically if present
+		if (c.reasoningContent) {
+			logService.info(`[DEBUG] reasoning_content extracted: ${c.reasoningContent.substring(0, 200)}${c.reasoningContent.length > 200 ? '...' : ''}`);
 		}
 	} catch (e) {
 		logService.warn(`[DEBUG] Failed to stringify FinishedCompletion: ${e}`);
