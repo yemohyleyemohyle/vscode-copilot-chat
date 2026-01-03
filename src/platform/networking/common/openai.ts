@@ -127,8 +127,9 @@ export type RawMessageConversionCallback = (message: CAPIChatMessage, thinkingDa
 /**
  * Converts a raw TSX chat message to CAPI's format.
  *
- * **Extra:** the raw message can have `copilot_references` and
- * `copilot_confirmations` properties, which are copied to the CAPI message.
+ * **Extra:** the raw message can have `copilot_references`,
+ * `copilot_confirmations`, and `reasoning_content` properties,
+ * which are copied to the CAPI message.
  */
 export function rawMessageToCAPI(message: Raw.ChatMessage, callback?: RawMessageConversionCallback): CAPIChatMessage;
 export function rawMessageToCAPI(message: Raw.ChatMessage[], callback?: RawMessageConversionCallback): CAPIChatMessage[];
@@ -143,6 +144,9 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 	}
 	if ('copilot_confirmations' in message) {
 		out.copilot_confirmations = (message as any).copilot_confirmations;
+	}
+	if ('reasoning_content' in message) {
+		out.reasoning_content = (message as any).reasoning_content;
 	}
 	if (typeof out.content === 'string') {
 		out.content = out.content.trimEnd();

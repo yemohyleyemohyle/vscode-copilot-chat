@@ -520,6 +520,11 @@ export function prepareChatCompletionForReturn(
 		content: toTextParts(messageContent),
 	};
 
+	// Add GLM reasoning_content to the message if present (like copilot_references)
+	if (c.reasoningContent) {
+		(message as any).reasoning_content = c.reasoningContent;
+	}
+
 	// Create enhanced message for telemetry with usage information
 	const telemetryMessage = rawMessageToCAPI(message);
 
