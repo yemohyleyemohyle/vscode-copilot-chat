@@ -280,8 +280,24 @@ export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model
 	// python has `\ndef` and `\nclass` which must be stop words for ghost text
 	// const stops = getLanguageConfig<string[]>(accessor, ConfigKey.Stops);
 
+	// Debug logging: Check if Raw messages have reasoning_content BEFORE conversion
+	console.log('[DEBUG] createCapiRequestBody - Raw messages:', JSON.stringify(options.messages.map(m => ({
+		role: m.role,
+		hasReasoningContent: 'reasoning_content' in m,
+		reasoningContent: (m as any).reasoning_content
+	}))));
+
+	const messages = rawMessageToCAPI(options.messages, callback);
+
+	// Debug logging: Check if CAPI messages have reasoning_content AFTER conversion
+	console.log('[DEBUG] createCapiRequestBody - CAPI messages:', JSON.stringify(messages.map((m: any) => ({
+		role: m.role,
+		hasReasoningContent: 'reasoning_content' in m,
+		reasoningContent: m.reasoning_content
+	}))));
+
 	const request: IEndpointBody = {
-		messages: rawMessageToCAPI(options.messages, callback),
+		messages,
 		model,
 		// stop: stops,
 	};
