@@ -138,7 +138,30 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 		return message.map(m => rawMessageToCAPI(m, callback));
 	}
 
+	// DEBUG: Log before conversion
+	const hasOpaquePartsInInput = message.content.some(part => part.type === Raw.ChatCompletionContentPartKind.Opaque);
+	if (message.role === Raw.ChatRole.Assistant && hasOpaquePartsInInput) {
+		console.log('[DEBUG THINKING] Raw message BEFORE toMode conversion:', {
+			role: message.role,
+			contentPartsCount: message.content.length,
+			opaquePartsCount: message.content.filter(p => p.type === Raw.ChatCompletionContentPartKind.Opaque).length,
+			contentPartTypes: message.content.map(p => p.type)
+		});
+	}
+
 	const out: CAPIChatMessage = toMode(OutputMode.OpenAI, message);
+
+	// DEBUG: Log after conversion
+	if (message.role === Raw.ChatRole.Assistant && hasOpaquePartsInInput) {
+		const outContentArray = Array.isArray(out.content) ? out.content : [];
+		console.log('[DEBUG THINKING] CAPI message AFTER toMode conversion:', {
+			role: out.role,
+			outContentPartsCount: Array.isArray(out.content) ? out.content.length : 0,
+			outContentType: typeof out.content,
+			outContentPartTypes: outContentArray.map((p: any) => p.type)
+		});
+	}
+
 	if ('copilot_references' in message) {
 		out.copilot_references = (message as any).copilot_references;
 	}
@@ -162,13 +185,10 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 		out.copilot_cache_control = { type: 'ephemeral' };
 	}
 
-	// DEBUG: Track thinking data extraction
-	let foundThinkingData = false;
 	for (const content of message.content) {
 		if (content.type === Raw.ChatCompletionContentPartKind.Opaque) {
 			const data = rawPartAsThinkingData(content);
 			if (data) {
-				foundThinkingData = true;
 				console.log('[DEBUG THINKING] Found opaque thinking data in message:', {
 					messageRole: message.role,
 					thinkingId: data.id,
@@ -180,15 +200,6 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 				callback(out, data);
 			}
 		}
-	}
-
-	// DEBUG: Log when assistant message has no thinking data
-	if (out.role === 'assistant' && !foundThinkingData) {
-		console.log('[DEBUG THINKING] Assistant message WITHOUT thinking data:', {
-			hasContent: !!out.content,
-			contentType: typeof out.content,
-			isArray: Array.isArray(out.content)
-		});
 	}
 
 	return out;

@@ -282,22 +282,6 @@ export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model
 
 	const messages = rawMessageToCAPI(options.messages, callback);
 
-	// DEBUG: Check for thinking data in CAPI messages
-	const assistantMessagesWithThinking = messages.filter((m: any) =>
-		m.role === 'assistant' && (m.cot_id || m.cot_summary || m.reasoning_content || m.reasoning_opaque)
-	);
-	console.log('[DEBUG THINKING] Assistant messages with thinking fields in final request:', {
-		totalMessages: messages.length,
-		assistantMessages: messages.filter((m: any) => m.role === 'assistant').length,
-		assistantWithThinking: assistantMessagesWithThinking.length,
-		thinkingFields: assistantMessagesWithThinking.map((m: any) => ({
-			hasCotId: !!m.cot_id,
-			hasCotSummary: !!m.cot_summary,
-			hasReasoningContent: !!m.reasoning_content,
-			hasReasoningOpaque: !!m.reasoning_opaque
-		}))
-	});
-
 	const request: IEndpointBody = {
 		messages,
 		model,
