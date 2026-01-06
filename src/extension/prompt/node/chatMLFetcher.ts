@@ -611,6 +611,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		const requestStart = Date.now();
 		const intent = locationToIntent(location);
 
+		// Debug logging: Show last 3 messages being sent to LLM in exact format
+		if (request.messages && Array.isArray(request.messages)) {
+			const lastThreeMessages = request.messages.slice(-3);
+			console.log('[DEBUG] Last 3 messages being sent to LLM:');
+			console.log(JSON.stringify(lastThreeMessages, null, 2));
+		}
+
 		// Wrap the Promise with success/error callbacks so we can log/measure it
 		return postRequest(
 			this._fetcherService,
