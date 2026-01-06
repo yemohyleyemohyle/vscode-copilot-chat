@@ -146,12 +146,6 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 
 	const out: CAPIChatMessage = toMode(OutputMode.OpenAI, message);
 
-	// DEBUG: Log after conversion - print ENTIRE CAPI message
-	if (message.role === Raw.ChatRole.Assistant) {
-		console.log('[DEBUG THINKING] CAPI message AFTER toMode conversion (FULL MESSAGE):');
-		console.log(JSON.stringify(out, null, 2));
-	}
-
 	if ('copilot_references' in message) {
 		out.copilot_references = (message as any).copilot_references;
 	}
@@ -190,6 +184,12 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 				callback(out, data);
 			}
 		}
+	}
+
+	// DEBUG: Log final message after all processing
+	if (message.role === Raw.ChatRole.Assistant) {
+		console.log('[DEBUG THINKING] Final CAPI message AFTER all processing (FULL MESSAGE):');
+		console.log(JSON.stringify(out, null, 2));
 	}
 
 	return out;
