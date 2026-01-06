@@ -109,6 +109,16 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	 */
 	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
 		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest } = opts;
+
+		// DEBUG: Log raw messages coming into fetchMany
+		console.log('[DEBUG THINKING] Messages received in fetchMany (before any processing):');
+		console.log('[DEBUG THINKING] Total messages:', messages.length);
+		const assistantMessages = messages.filter(m => m.role === Raw.ChatRole.Assistant);
+		console.log('[DEBUG THINKING] Assistant messages count:', assistantMessages.length);
+		assistantMessages.forEach((msg, idx) => {
+			console.log(`[DEBUG THINKING] Assistant message #${idx + 1}:`, JSON.stringify(msg, null, 2));
+		});
+
 		if (!telemetryProperties) {
 			telemetryProperties = {};
 		}
