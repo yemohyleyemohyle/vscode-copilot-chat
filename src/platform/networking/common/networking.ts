@@ -280,17 +280,23 @@ export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model
 	// python has `\ndef` and `\nclass` which must be stop words for ghost text
 	// const stops = getLanguageConfig<string[]>(accessor, ConfigKey.Stops);
 
-	// Debug logging: Show last 3 Raw messages BEFORE conversion
-	const lastThreeRaw = options.messages.slice(-3);
-	console.log('[DEBUG] createCapiRequestBody - Last 3 Raw messages:');
-	console.log(JSON.stringify(lastThreeRaw, null, 2));
-
 	const messages = rawMessageToCAPI(options.messages, callback);
 
-	// Debug logging: Show last 3 CAPI messages AFTER conversion
-	const lastThreeCAPI = messages.slice(-3);
-	console.log('[DEBUG] createCapiRequestBody - Last 3 CAPI messages:');
-	console.log(JSON.stringify(lastThreeCAPI, null, 2));
+	// DEBUG: Check for thinking data in CAPI messages
+	const assistantMessagesWithThinking = messages.filter((m: any) =>
+		m.role === 'assistant' && (m.cot_id || m.cot_summary || m.reasoning_content || m.reasoning_opaque)
+	);
+	console.log('[DEBUG THINKING] Assistant messages with thinking fields in final request:', {
+		totalMessages: messages.length,
+		assistantMessages: messages.filter((m: any) => m.role === 'assistant').length,
+		assistantWithThinking: assistantMessagesWithThinking.length,
+		thinkingFields: assistantMessagesWithThinking.map((m: any) => ({
+			hasCotId: !!m.cot_id,
+			hasCotSummary: !!m.cot_summary,
+			hasReasoningContent: !!m.reasoning_content,
+			hasReasoningOpaque: !!m.reasoning_opaque
+		}))
+	});
 
 	const request: IEndpointBody = {
 		messages,

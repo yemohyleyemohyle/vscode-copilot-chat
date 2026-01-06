@@ -162,13 +162,33 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 		out.copilot_cache_control = { type: 'ephemeral' };
 	}
 
+	// DEBUG: Track thinking data extraction
+	let foundThinkingData = false;
 	for (const content of message.content) {
 		if (content.type === Raw.ChatCompletionContentPartKind.Opaque) {
 			const data = rawPartAsThinkingData(content);
+			if (data) {
+				foundThinkingData = true;
+				console.log('[DEBUG THINKING] Found opaque thinking data in message:', {
+					messageRole: message.role,
+					thinkingId: data.id,
+					thinkingTextLength: Array.isArray(data.text) ? data.text.join('').length : data.text?.length,
+					hasCallback: !!callback
+				});
+			}
 			if (callback && data) {
 				callback(out, data);
 			}
 		}
+	}
+
+	// DEBUG: Log when assistant message has no thinking data
+	if (out.role === 'assistant' && !foundThinkingData) {
+		console.log('[DEBUG THINKING] Assistant message WITHOUT thinking data:', {
+			hasContent: !!out.content,
+			contentType: typeof out.content,
+			isArray: Array.isArray(out.content)
+		});
 	}
 
 	return out;
