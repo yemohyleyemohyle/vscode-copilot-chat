@@ -138,38 +138,18 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 		return message.map(m => rawMessageToCAPI(m, callback));
 	}
 
-	// DEBUG: Log before conversion - check ALL assistant messages
+	// DEBUG: Log before conversion - print ENTIRE assistant message
 	if (message.role === Raw.ChatRole.Assistant) {
-		const hasOpaquePartsInInput = message.content.some(part => part.type === Raw.ChatCompletionContentPartKind.Opaque);
-		console.log('[DEBUG THINKING] Raw message BEFORE toMode conversion:', {
-			role: message.role,
-			contentPartsCount: message.content.length,
-			opaquePartsCount: message.content.filter(p => p.type === Raw.ChatCompletionContentPartKind.Opaque).length,
-			contentPartTypes: message.content.map(p => p.type),
-			hasOpaquePartsInInput,
-			// Check for any reasoning-related properties
-			hasReasoningContent: 'reasoning_content' in message,
-			hasCotId: 'cot_id' in message,
-			hasCotSummary: 'cot_summary' in message
-		});
+		console.log('[DEBUG THINKING] Raw message BEFORE toMode conversion (FULL MESSAGE):');
+		console.log(JSON.stringify(message, null, 2));
 	}
 
 	const out: CAPIChatMessage = toMode(OutputMode.OpenAI, message);
 
-	// DEBUG: Log after conversion
+	// DEBUG: Log after conversion - print ENTIRE CAPI message
 	if (message.role === Raw.ChatRole.Assistant) {
-		const outContentArray = Array.isArray(out.content) ? out.content : [];
-		console.log('[DEBUG THINKING] CAPI message AFTER toMode conversion:', {
-			role: out.role,
-			outContentPartsCount: Array.isArray(out.content) ? out.content.length : 0,
-			outContentType: typeof out.content,
-			outContentPartTypes: outContentArray.map((p: any) => p.type),
-			// Check thinking fields in output
-			hasReasoningContent: !!out.reasoning_content,
-			hasCotId: !!out.cot_id,
-			hasCotSummary: !!out.cot_summary,
-			hasReasoningOpaque: !!out.reasoning_opaque
-		});
+		console.log('[DEBUG THINKING] CAPI message AFTER toMode conversion (FULL MESSAGE):');
+		console.log(JSON.stringify(out, null, 2));
 	}
 
 	if ('copilot_references' in message) {
