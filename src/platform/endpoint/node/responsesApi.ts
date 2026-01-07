@@ -99,27 +99,81 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 	const input: OpenAI.Responses.ResponseInputItem[] = [];
 	for (const message of messages) {
 		switch (message.role) {
-			case Raw.ChatRole.Assistant:
+			case Raw.ChatRole.Assistant: {
+				// Extract thinking data as plain text (for GLM models)
+				const thinkingParts = message.content
+					.filter(part => part.type === Raw.ChatCompletionContentPartKind.Opaque)
+					.map(part => {
+						const thinkingData = rawPartAsThinkingData(part);
+						if (thinkingData) {
+							// For GLM, use plain text thinking
+							const text = Array.isArray(thinkingData.text) ? thinkingData.text.join('') : thinkingData.text;
+							return text;
+						}
+						return undefined;
+					})
+					.filter(isDefined);
+
+				const reasoningContent = thinkingParts.length > 0 ? thinkingParts.join('\n\n') : undefined;
+
 				if (message.content.length) {
-					input.push(...extractThinkingData(message.content));
 					const asstContent = message.content.map(rawContentToResponsesOutputContent).filter(isDefined);
-					if (asstContent.length) {
-						input.push({
+					if (asstContent.length || reasoningContent || message.toolCalls) {
+						// Create a single combined assistant message with content, reasoning_content, and tool_calls
+						const combinedMessage: OpenAI.Responses.ResponseOutputMessage & { reasoning_content?: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> } = {
 							role: 'assistant',
-							content: asstContent,
-							// I don't think this needs to be round-tripped.
+							content: asstContent.length > 0 ? asstContent : [],
 							id: 'msg_123',
 							status: 'completed',
 							type: 'message',
-						} satisfies OpenAI.Responses.ResponseOutputMessage);
+						};
+
+						// Add reasoning_content if present (GLM format)
+						if (reasoningContent) {
+							combinedMessage.reasoning_content = reasoningContent;
+						}
+
+						// Add tool_calls if present
+						if (message.toolCalls && message.toolCalls.length > 0) {
+							combinedMessage.tool_calls = message.toolCalls.map(tc => ({
+								id: tc.id,
+								type: 'function',
+								function: {
+									name: tc.function.name,
+									arguments: tc.function.arguments
+								}
+							}));
+						}
+
+						input.push(combinedMessage);
 					}
-				}
-				if (message.toolCalls) {
-					for (const toolCall of message.toolCalls) {
-						input.push({ type: 'function_call', name: toolCall.function.name, arguments: toolCall.function.arguments, call_id: toolCall.id });
+				} else if (message.toolCalls) {
+					// Handle case where there's no content but there are tool calls
+					const combinedMessage: OpenAI.Responses.ResponseOutputMessage & { reasoning_content?: string; tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }> } = {
+						role: 'assistant',
+						content: [],
+						id: 'msg_123',
+						status: 'completed',
+						type: 'message',
+					};
+
+					if (reasoningContent) {
+						combinedMessage.reasoning_content = reasoningContent;
 					}
+
+					combinedMessage.tool_calls = message.toolCalls.map(tc => ({
+						id: tc.id,
+						type: 'function',
+						function: {
+							name: tc.function.name,
+							arguments: tc.function.arguments
+						}
+					}));
+
+					input.push(combinedMessage);
 				}
 				break;
+			}
 			case Raw.ChatRole.Tool:
 				if (message.toolCallId) {
 					const asText = message.content
@@ -177,21 +231,23 @@ function rawContentToResponsesOutputContent(part: Raw.ChatCompletionContentPart)
 	}
 }
 
-function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.Responses.ResponseReasoningItem[] {
-	return coalesce(content.map(part => {
-		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
-			const thinkingData = rawPartAsThinkingData(part);
-			if (thinkingData) {
-				return {
-					type: 'reasoning',
-					id: thinkingData.id,
-					summary: [],
-					encrypted_content: thinkingData.encrypted,
-				} satisfies OpenAI.Responses.ResponseReasoningItem;
-			}
-		}
-	}));
-}
+// NOTE: This function is no longer used as we now combine thinking data with assistant messages
+// instead of creating separate reasoning items. Keeping it commented for reference.
+// function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.Responses.ResponseReasoningItem[] {
+// 	return coalesce(content.map(part => {
+// 		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
+// 			const thinkingData = rawPartAsThinkingData(part);
+// 			if (thinkingData) {
+// 				return {
+// 					type: 'reasoning',
+// 					id: thinkingData.id,
+// 					summary: [],
+// 					encrypted_content: thinkingData.encrypted,
+// 				} satisfies OpenAI.Responses.ResponseReasoningItem;
+// 			}
+// 		}
+// 	}));
+// }
 
 /**
  * This is an approximate responses input -> raw messages helper, should be used for logging only
@@ -322,7 +378,7 @@ function ensureContentArray(content: string | OpenAI.Responses.ResponseInputMess
 	return content;
 }
 
-function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent | OpenAI.Responses.ResponseFunctionCallOutputItem): Raw.ChatCompletionContentPart | undefined {
+function responseContentToRawContent(part: OpenAI.Responses.ResponseInputContent): Raw.ChatCompletionContentPart | undefined {
 	switch (part.type) {
 		case 'input_text':
 			return { type: Raw.ChatCompletionContentPartKind.Text, text: part.text };
@@ -354,7 +410,7 @@ function responseOutputToRawContent(part: OpenAI.Responses.ResponseOutputText | 
 	}
 }
 
-function responseFunctionOutputToRawContents(output: string | OpenAI.Responses.ResponseFunctionCallOutputItemList): Raw.ChatCompletionContentPart[] {
+function responseFunctionOutputToRawContents(output: string | Array<OpenAI.Responses.ResponseInputContent>): Raw.ChatCompletionContentPart[] {
 	if (typeof output === 'string') {
 		return [{ type: Raw.ChatCompletionContentPartKind.Text, text: output }];
 	}
