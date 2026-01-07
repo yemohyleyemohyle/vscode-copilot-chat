@@ -100,6 +100,9 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 	for (const message of messages) {
 		switch (message.role) {
 			case Raw.ChatRole.Assistant: {
+				// Log the Raw assistant message BEFORE transformation
+				console.log('[DEBUG TRANSFORM] Raw Assistant message BEFORE:', JSON.stringify(message, null, 2));
+
 				// Extract thinking data as plain text (for GLM models)
 				const thinkingParts = message.content
 					.filter(part => part.type === Raw.ChatCompletionContentPartKind.Opaque)
@@ -146,6 +149,9 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 						}
 
 						input.push(combinedMessage);
+
+						// Log the combined message AFTER transformation
+						console.log('[DEBUG TRANSFORM] Combined Assistant message AFTER:', JSON.stringify(combinedMessage, null, 2));
 					}
 				} else if (message.toolCalls) {
 					// Handle case where there's no content but there are tool calls
@@ -171,6 +177,9 @@ function rawMessagesToResponseAPI(modelId: string, messages: readonly Raw.ChatMe
 					}));
 
 					input.push(combinedMessage);
+
+					// Log the combined message AFTER transformation (no content case)
+					console.log('[DEBUG TRANSFORM] Combined Assistant message AFTER (no content):', JSON.stringify(combinedMessage, null, 2));
 				}
 				break;
 			}
