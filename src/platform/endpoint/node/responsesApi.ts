@@ -31,6 +31,23 @@ export function createResponsesRequestBody(accessor: ServicesAccessor, options: 
 	const configService = accessor.get(IConfigurationService);
 	const expService = accessor.get(IExperimentationService);
 	const verbosity = getVerbosityForModelSync(endpoint);
+
+	// DEBUG: Log raw messages BEFORE Responses API conversion/splitting
+	console.log('[DEBUG THINKING] Messages BEFORE rawMessagesToResponseAPI conversion:');
+	console.log('[DEBUG THINKING] Total messages:', options.messages.length);
+	const assistantMessages = options.messages.filter(m => m.role === Raw.ChatRole.Assistant);
+	console.log('[DEBUG THINKING] Assistant messages count:', assistantMessages.length);
+	assistantMessages.forEach((msg, idx) => {
+		console.log(`[DEBUG THINKING] Assistant message ${idx}:`, JSON.stringify({
+			role: msg.role,
+			hasContent: msg.content?.length > 0,
+			contentTypes: msg.content?.map(c => c.type),
+			hasToolCalls: 'toolCalls' in msg && !!msg.toolCalls,
+			toolCallsCount: ('toolCalls' in msg && msg.toolCalls) ? msg.toolCalls.length : 0,
+			hasReasoningContent: 'reasoning_content' in msg,
+		}, null, 2));
+	});
+
 	const body: IEndpointBody = {
 		model,
 		...rawMessagesToResponseAPI(model, options.messages, !!options.ignoreStatefulMarker),
