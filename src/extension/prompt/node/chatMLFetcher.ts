@@ -162,6 +162,15 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			uiKind: ChatLocation.toString(location)
 		});
 
+		// DEBUG: Log messages that will be sent to logChatRequest
+		console.log('[DEBUG LOG] Messages about to be logged to logChatRequest:');
+		console.log('[DEBUG LOG] Total messages:', opts.messages.length);
+		const logAssistantMessages = opts.messages.filter(m => m.role === Raw.ChatRole.Assistant);
+		console.log('[DEBUG LOG] Assistant messages count:', logAssistantMessages.length);
+		logAssistantMessages.forEach((msg, idx) => {
+			console.log(`[DEBUG LOG] Assistant message ${idx + 1} (FULL):`, JSON.stringify(msg, null, 2));
+		});
+
 		const pendingLoggedChatRequest = this._requestLogger.logChatRequest(debugName, chatEndpoint, {
 			messages: opts.messages,
 			model: chatEndpoint.model,

@@ -106,15 +106,17 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 		const statefulMarker = round.statefulMarker && <StatefulMarkerContainer statefulMarker={{ modelId: this.promptEndpoint.model, marker: round.statefulMarker }} />;
 
 		// DEBUG: Log thinking data availability before filtering
+		const shouldIncludeThinking = this.promptEndpoint.supportsThinkingContentInHistory || !this.props.isHistorical;
 		console.log('[DEBUG THINKING] Round thinking data:', {
 			isHistorical: this.props.isHistorical,
 			hasThinking: !!round.thinking,
 			thinkingId: round.thinking?.id,
 			thinkingTextLength: Array.isArray(round.thinking?.text) ? round.thinking.text.join('').length : round.thinking?.text?.length,
-			willIncludeThinking: (!this.props.isHistorical) && !!round.thinking
+			supportsThinkingContentInHistory: this.promptEndpoint.supportsThinkingContentInHistory,
+			willIncludeThinking: shouldIncludeThinking && !!round.thinking
 		});
 
-		const thinking = (!this.props.isHistorical) && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
+		const thinking = shouldIncludeThinking && round.thinking && <ThinkingDataContainer thinking={round.thinking} />;
 		children.push(
 			<AssistantMessage toolCalls={assistantToolCalls}>
 				{statefulMarker}

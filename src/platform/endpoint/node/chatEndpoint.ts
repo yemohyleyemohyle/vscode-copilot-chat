@@ -123,6 +123,7 @@ export class ChatEndpoint implements IChatEndpoint {
 	public readonly supportsToolCalls: boolean;
 	public readonly supportsVision: boolean;
 	public readonly supportsPrediction: boolean;
+	public readonly supportsThinkingContentInHistory?: boolean;
 	public readonly isPremium?: boolean | undefined;
 	public readonly multiplier?: number | undefined;
 	public readonly restrictedToSkus?: string[] | undefined;
@@ -163,6 +164,7 @@ export class ChatEndpoint implements IChatEndpoint {
 		this.supportsToolCalls = !!modelMetadata.capabilities.supports.tool_calls;
 		this.supportsVision = !!modelMetadata.capabilities.supports.vision;
 		this.supportsPrediction = !!modelMetadata.capabilities.supports.prediction;
+		this.supportsThinkingContentInHistory = !!modelMetadata.capabilities.supports.thinking;
 		this._supportsStreaming = !!modelMetadata.capabilities.supports.streaming;
 		this._policyDetails = modelMetadata.policy;
 		this.customModel = modelMetadata.custom_model;
