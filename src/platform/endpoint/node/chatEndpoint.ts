@@ -255,12 +255,15 @@ export class ChatEndpoint implements IChatEndpoint {
 
 	createRequestBody(options: ICreateEndpointBodyOptions): IEndpointBody {
 		if (this.useResponsesApi) {
+			console.log('[DEBUG API PATH] Using Responses API for model:', this.model);
 			const body = this._instantiationService.invokeFunction(createResponsesRequestBody, options, this.model, this);
 			return this.customizeResponsesBody(body);
 		} else if (this.useMessagesApi) {
+			console.log('[DEBUG API PATH] Using Messages API for model:', this.model);
 			const body = this._instantiationService.invokeFunction(createMessagesRequestBody, options, this.model, this);
 			return this.customizeMessagesBody(body);
 		} else {
+			console.log('[DEBUG API PATH] Using CAPI (Chat Completions) for model:', this.model);
 			const body = createCapiRequestBody(options, this.model, this.getCompletionsCallback());
 			return this.customizeCapiBody(body, options);
 		}
