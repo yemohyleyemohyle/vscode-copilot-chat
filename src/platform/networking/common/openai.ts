@@ -169,6 +169,9 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 		out.copilot_cache_control = { type: 'ephemeral' };
 	}
 
+	// Extract thinking data from opaque parts for GLM-style models (plain text thinking)
+	// This is separate from the callback mechanism used for encrypted thinking
+	const thinkingTexts: string[] = [];
 	for (const content of message.content) {
 		if (content.type === Raw.ChatCompletionContentPartKind.Opaque) {
 			const data = rawPartAsThinkingData(content);
@@ -177,13 +180,29 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 					messageRole: message.role,
 					thinkingId: data.id,
 					thinkingTextLength: Array.isArray(data.text) ? data.text.join('').length : data.text?.length,
-					hasCallback: !!callback
+					hasCallback: !!callback,
+					hasEncrypted: !!data.encrypted
 				});
+
+				// If there's plain text thinking and no callback, add to reasoning_content
+				if (data.text && !callback) {
+					const text = Array.isArray(data.text) ? data.text.join('') : data.text;
+					if (text) {
+						thinkingTexts.push(text);
+						console.log('[DEBUG THINKING] Extracted plain text thinking (preview):', text.substring(0, 100));
+					}
+				}
 			}
 			if (callback && data) {
 				callback(out, data);
 			}
 		}
+	}
+
+	// Add reasoning_content field for GLM models if we found plain text thinking
+	if (thinkingTexts.length > 0 && message.role === Raw.ChatRole.Assistant) {
+		out.reasoning_content = thinkingTexts.join('\n\n');
+		console.log('[DEBUG THINKING] Added reasoning_content field to CAPI message, length:', out.reasoning_content.length);
 	}
 
 	// DEBUG: Log final message after all processing
