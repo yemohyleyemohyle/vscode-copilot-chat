@@ -108,6 +108,15 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 	 * Note: the returned array of strings may be less than `n` (e.g., in case there were errors during streaming)
 	 */
 	public async fetchMany(opts: IFetchMLOptions, token: CancellationToken): Promise<ChatResponses> {
+		// DEBUG: Log BEFORE destructuring to see if thinking is present in opts
+		console.log('[DEBUG THINKING] opts.messages at fetchMany entry (BEFORE destructuring):');
+		console.log('[DEBUG THINKING] Total messages:', opts.messages.length);
+		const optsAssistantMessages = opts.messages.filter(m => m.role === Raw.ChatRole.Assistant);
+		console.log('[DEBUG THINKING] Assistant messages count:', optsAssistantMessages.length);
+		optsAssistantMessages.forEach((msg, idx) => {
+			console.log(`[DEBUG THINKING] opts Assistant message #${idx + 1} (FULL):`, JSON.stringify(msg, null, 2));
+		});
+
 		let { debugName, endpoint: chatEndpoint, finishedCb, location, messages, requestOptions, source, telemetryProperties, userInitiatedRequest } = opts;
 
 		// DEBUG: Log raw messages coming into fetchMany
