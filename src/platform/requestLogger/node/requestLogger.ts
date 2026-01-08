@@ -235,6 +235,15 @@ export abstract class AbstractRequestLogger extends Disposable implements IReque
 	public abstract logToolCall(id: string, name: string | undefined, args: unknown, response: LanguageModelToolResult2): void;
 
 	public logChatRequest(debugName: string, chatEndpoint: IChatEndpoint, chatParams: ILoggedPendingRequest): PendingLoggedChatRequest {
+		// DEBUG: Log a snapshot of messages at the time they are stored in the logger
+		// This snapshot won't change even if the original messages are modified later
+		const snapshotMessages = JSON.parse(JSON.stringify(chatParams.messages)) as Raw.ChatMessage[];
+		const snapshotAssistantMessages = snapshotMessages.filter(m => m.role === Raw.ChatRole.Assistant);
+		snapshotAssistantMessages.forEach((msg, idx: number) => {
+			console.log(`[DEBUG LOGGER SNAPSHOT] Assistant message ${idx + 1} (FULL):`, JSON.stringify(msg, null, 2));
+		});
+
+		// Store the messages by reference (so modifications later will appear in chat-export-logs.json)
 		return new PendingLoggedChatRequest(this, debugName, chatEndpoint, chatParams);
 	}
 
