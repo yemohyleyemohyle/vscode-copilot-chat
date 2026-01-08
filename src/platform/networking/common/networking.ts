@@ -280,7 +280,25 @@ export function createCapiRequestBody(options: ICreateEndpointBodyOptions, model
 	// python has `\ndef` and `\nclass` which must be stop words for ghost text
 	// const stops = getLanguageConfig<string[]>(accessor, ConfigKey.Stops);
 
+	// DEBUG: Log Raw messages BEFORE rawMessageToCAPI conversion
+	console.log('[DEBUG CAPI] createCapiRequestBody - Raw messages BEFORE conversion:');
+	console.log('[DEBUG CAPI] Total messages:', options.messages.length);
+	const assistantMessages = options.messages.filter(m => m.role === Raw.ChatRole.Assistant);
+	console.log('[DEBUG CAPI] Assistant messages count:', assistantMessages.length);
+	assistantMessages.forEach((msg, idx) => {
+		console.log(`[DEBUG CAPI] Raw Assistant message ${idx} (FULL MESSAGE):`, JSON.stringify(msg, null, 2));
+	});
+
 	const messages = rawMessageToCAPI(options.messages, callback);
+
+	// DEBUG: Log CAPI messages AFTER conversion
+	console.log('[DEBUG CAPI] createCapiRequestBody - CAPI messages AFTER conversion:');
+	console.log('[DEBUG CAPI] Total messages:', messages.length);
+	const capiAssistantMessages = messages.filter((m: any) => m.role === 'assistant');
+	console.log('[DEBUG CAPI] Assistant messages count:', capiAssistantMessages.length);
+	capiAssistantMessages.forEach((msg: any, idx: number) => {
+		console.log(`[DEBUG CAPI] CAPI Assistant message ${idx} (FULL MESSAGE):`, JSON.stringify(msg, null, 2));
+	});
 
 	const request: IEndpointBody = {
 		messages,
