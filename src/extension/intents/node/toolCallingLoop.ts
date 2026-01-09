@@ -526,8 +526,30 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	}
 
 	private applyMessagePostProcessing(messages: Raw.ChatMessage[]): Raw.ChatMessage[] {
-		return this.validateToolMessages(
+		// DEBUG: Log opaque thinking parts BEFORE post-processing
+		const beforeOpaque = messages
+			.filter(m => m.role === Raw.ChatRole.Assistant && Array.isArray(m.content))
+			.flatMap(m => m.content.filter(p => p.type === Raw.ChatCompletionContentPartKind.Opaque));
+
+		if (beforeOpaque.length > 0) {
+			console.log('[DEBUG POSTPROCESSING BEFORE] Opaque parts found:', JSON.stringify(beforeOpaque, null, 2));
+		}
+
+		const result = this.validateToolMessages(
 			ToolCallingLoop.stripInternalToolCallIds(messages));
+
+		// DEBUG: Log opaque thinking parts AFTER post-processing
+		const afterOpaque = result
+			.filter(m => m.role === Raw.ChatRole.Assistant && Array.isArray(m.content))
+			.flatMap(m => m.content.filter(p => p.type === Raw.ChatCompletionContentPartKind.Opaque));
+
+		if (afterOpaque.length > 0) {
+			console.log('[DEBUG POSTPROCESSING AFTER] Opaque parts found:', JSON.stringify(afterOpaque, null, 2));
+		} else if (beforeOpaque.length > 0) {
+			console.log('[DEBUG POSTPROCESSING AFTER] WARNING: Opaque parts were lost!');
+		}
+
+		return result;
 	}
 
 	public static stripInternalToolCallIds(messages: Raw.ChatMessage[]): Raw.ChatMessage[] {
