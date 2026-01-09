@@ -179,9 +179,19 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 	if ('copilot_confirmations' in message) {
 		out.copilot_confirmations = (message as any).copilot_confirmations;
 	}
+	// Check if reasoning_content already exists on the Raw message (e.g., from previous storage/retrieval cycle)
+	// If not, extract it from opaque parts
 	if ('reasoning_content' in message) {
 		out.reasoning_content = (message as any).reasoning_content;
+		if (out.reasoning_content) {
+			console.log('[DEBUG THINKING] Copied existing reasoning_content from Raw message, length:', out.reasoning_content.length);
+		}
+	} else if (thinkingTexts.length > 0 && message.role === Raw.ChatRole.Assistant) {
+		// Add reasoning_content field if we extracted thinking text from opaque parts
+		out.reasoning_content = thinkingTexts.join('\n\n');
+		console.log('[DEBUG THINKING] Added reasoning_content field from extracted thinking text, length:', out.reasoning_content.length);
 	}
+
 	if (typeof out.content === 'string') {
 		out.content = out.content.trimEnd();
 	} else {
@@ -194,12 +204,6 @@ export function rawMessageToCAPI(message: Raw.ChatMessage[] | Raw.ChatMessage, c
 
 	if (message.content.find(part => part.type === ChatCompletionContentPartKind.CacheBreakpoint)) {
 		out.copilot_cache_control = { type: 'ephemeral' };
-	}
-
-	// Add reasoning_content field if we extracted thinking text above
-	if (thinkingTexts.length > 0 && message.role === Raw.ChatRole.Assistant) {
-		out.reasoning_content = thinkingTexts.join('\n\n');
-		console.log('[DEBUG THINKING] Added reasoning_content field to CAPI message, length:', out.reasoning_content.length);
 	}
 
 	// Let callback add additional fields (reasoning_opaque, reasoning_text) if needed

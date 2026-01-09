@@ -162,6 +162,35 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			uiKind: ChatLocation.toString(location)
 		});
 
+		// CRITICAL FIX: Extract and preserve reasoning_content on Raw messages BEFORE logging
+		// This ensures reasoning_content survives the logger's storage/retrieval cycle
+		for (const msg of opts.messages) {
+			if (msg.role === Raw.ChatRole.Assistant) {
+				// Extract thinking text from opaque parts
+				const thinkingTexts: string[] = [];
+				for (const content of msg.content) {
+					if (content.type === Raw.ChatCompletionContentPartKind.Opaque) {
+						const opaqueData = content.value as any;
+						if (opaqueData?.data?.id?.startsWith('thinking-')) {
+							const thinkingData = opaqueData.data;
+							if (thinkingData.text) {
+								const text = Array.isArray(thinkingData.text) ? thinkingData.text.join('') : thinkingData.text;
+								if (text) {
+									thinkingTexts.push(text);
+								}
+							}
+						}
+					}
+				}
+				// Store reasoning_content as a top-level field on the Raw message
+				// so it survives JSON serialization in the logger
+				if (thinkingTexts.length > 0) {
+					(msg as any).reasoning_content = thinkingTexts.join('\n\n');
+					console.log('[DEBUG FIX] Preserved reasoning_content on Raw message, length:', (msg as any).reasoning_content.length);
+				}
+			}
+		}
+
 		// DEBUG: Log messages that will be sent to logChatRequest
 		console.log('[DEBUG LOG] Messages about to be logged to logChatRequest:');
 		console.log('[DEBUG LOG] Total messages:', opts.messages.length);
