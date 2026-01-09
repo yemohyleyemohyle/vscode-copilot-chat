@@ -22,6 +22,8 @@ export interface IThinkingDataContainerProps extends BasePromptElementProps {
 export class ThinkingDataContainer extends PromptElement<IThinkingDataContainerProps> {
 	render() {
 		const { thinking } = this.props;
+		// DEBUG: Log when thinking is being rendered into an opaque part
+		console.log('[DEBUG THINKING CONTAINER] Rendering thinking into opaque part:', JSON.stringify(thinking));
 		const container: IThinkingDataOpaque = { type: CustomDataPartMimeTypes.ThinkingData, thinking };
 		return <opaque value={container} tokenUsage={thinking.tokens} />;
 	}

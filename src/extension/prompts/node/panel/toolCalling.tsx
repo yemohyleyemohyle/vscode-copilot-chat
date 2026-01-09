@@ -85,6 +85,11 @@ export class ChatToolCalls extends PromptElement<ChatToolCallsProps, void> {
 	 * Render one round of tool calling: the assistant message text, its tool calls, and the results of those tool calls.
 	 */
 	private renderOneToolCallRound(round: IToolCallRound, index: number, total: number): PromptElement[] {
+		// DEBUG: Log what's in the round before rendering
+		console.log(`[DEBUG TOOL CALLING] renderOneToolCallRound - round ${index}, isHistorical:`, this.props.isHistorical);
+		console.log('[DEBUG TOOL CALLING] round.thinking:', round.thinking ? JSON.stringify(round.thinking) : 'undefined');
+		console.log('[DEBUG TOOL CALLING] round.response:', round.response);
+
 		let fixedNameToolCalls = round.toolCalls.map(tc => ({ ...tc, name: this.toolsService.validateToolName(tc.name) ?? tc.name }));
 		if (this.props.isHistorical) {
 			fixedNameToolCalls = fixedNameToolCalls.filter(tc => tc.id && this.props.toolCallResults?.[tc.id]);
