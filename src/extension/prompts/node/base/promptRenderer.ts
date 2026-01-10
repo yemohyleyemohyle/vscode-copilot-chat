@@ -103,10 +103,12 @@ export class PromptRenderer<P extends BasePromptElementProps> extends BasePrompt
 	override async render(progress?: Progress<ChatResponsePart> | undefined, token?: CancellationToken | undefined, opts?: Partial<{ trace: boolean }>): Promise<RenderPromptResult> {
 		const result = await super.render(progress, token);
 
-		// DEBUG: Log assistant messages from PromptRenderer.render() result
+		// DEBUG: Log assistant messages from PromptRenderer.render() result with stack trace
 		const assistantMessages = result.messages.filter(m => m.role === Raw.ChatRole.Assistant);
 		if (assistantMessages.length > 0) {
-			console.log('[DEBUG PROMPT_RENDERER] PromptRenderer.render() - assistant messages from BasePromptRenderer:');
+			const stack = new Error().stack?.split('\n').slice(1, 8).join('\n') || 'no stack';
+			console.log(`[DEBUG PROMPT_RENDERER] PromptRenderer.render() called at ${new Date().toISOString()}`);
+			console.log(`[DEBUG PROMPT_RENDERER] STACK TRACE:\n${stack}`);
 			assistantMessages.forEach((msg, idx) => {
 				console.log(`[DEBUG PROMPT_RENDERER] Assistant message ${idx + 1} (FULL):`, JSON.stringify(msg, null, 2));
 			});
