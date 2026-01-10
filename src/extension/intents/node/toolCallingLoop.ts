@@ -437,8 +437,30 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		let thinkingItem: ThinkingDataItem | undefined;
 		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
 		const disableThinking = isContinuation && isAnthropicFamily(endpoint) && !ToolCallingLoop.messagesContainThinking(buildPromptResult.messages);
+
+		// DEBUG: Log messages BEFORE applyMessagePostProcessing (these are what go into this.fetch)
+		const messagesBeforePostProcess = buildPromptResult.messages;
+		const assistantMsgsBeforePostProcess = messagesBeforePostProcess.filter(m => m.role === Raw.ChatRole.Assistant);
+		if (assistantMsgsBeforePostProcess.length > 0) {
+			console.log('[DEBUG BEFORE_FETCH] Messages BEFORE applyMessagePostProcessing:');
+			assistantMsgsBeforePostProcess.forEach((msg, idx) => {
+				console.log(`[DEBUG BEFORE_FETCH] Assistant message ${idx + 1} (FULL):`, JSON.stringify(msg, null, 2));
+			});
+		}
+
+		const postProcessedMessages = this.applyMessagePostProcessing(buildPromptResult.messages);
+
+		// DEBUG: Log messages AFTER applyMessagePostProcessing (these are what actually go into fetch)
+		const assistantMsgsAfterPostProcess = postProcessedMessages.filter(m => m.role === Raw.ChatRole.Assistant);
+		if (assistantMsgsAfterPostProcess.length > 0) {
+			console.log('[DEBUG BEFORE_FETCH] Messages AFTER applyMessagePostProcessing (going into this.fetch):');
+			assistantMsgsAfterPostProcess.forEach((msg, idx) => {
+				console.log(`[DEBUG BEFORE_FETCH] Assistant message ${idx + 1} (FULL):`, JSON.stringify(msg, null, 2));
+			});
+		}
+
 		const fetchResult = await this.fetch({
-			messages: this.applyMessagePostProcessing(buildPromptResult.messages),
+			messages: postProcessedMessages,
 			finishedCb: async (text, index, delta) => {
 				fetchStreamSource?.update(text, delta);
 				if (delta.copilotToolCalls) {
@@ -677,6 +699,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		};
 
 		const buildPromptResult = await this.buildPrompt(buildPromptContext, progress, token);
+
+		// DEBUG: Log assistant messages after buildPrompt returns
+		const assistantMessages = buildPromptResult.messages.filter(m => m.role === Raw.ChatRole.Assistant);
+		if (assistantMessages.length > 0) {
+			console.log('[DEBUG BUILD_PROMPT2] buildPrompt2 - assistant messages after buildPrompt():');
+			assistantMessages.forEach((msg, idx) => {
+				console.log(`[DEBUG BUILD_PROMPT2] Assistant message ${idx + 1} (FULL):`, JSON.stringify(msg, null, 2));
+			});
+		}
+
 		for (const metadata of buildPromptResult.metadata.getAll(ToolResultMetadata)) {
 			this.logToolResult(buildPromptContext, metadata);
 			this.toolCallResults[metadata.toolCallId] = metadata.result;

@@ -305,6 +305,15 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 		addCacheBreakpoints(result.messages);
 
+		// DEBUG: Log assistant messages before returning from buildPrompt in agentIntent
+		const assistantMessages = result.messages.filter(m => m.role === Raw.ChatRole.Assistant);
+		if (assistantMessages.length > 0) {
+			console.log('[DEBUG AGENT_INTENT] agentIntent.buildPrompt - assistant messages before return:');
+			assistantMessages.forEach((msg, idx) => {
+				console.log(`[DEBUG AGENT_INTENT] Assistant message ${idx + 1} (FULL):`, JSON.stringify(msg, null, 2));
+			});
+		}
+
 		if (this.request.command === 'error') {
 			// Should trigger a 400
 			result.messages.push({
