@@ -36,4 +36,5 @@ import './testFailureTool';
 import './toolReplayTool';
 import './vscodeAPITool';
 import './vscodeCmdTool';
+import './etaEstimateTool';
 

@@ -1141,6 +1141,26 @@
 				}
 			},
 			{
+				"name": "copilot_etaEstimate",
+				"toolReferenceName": "etaEstimate",
+				"displayName": "%copilot.tools.etaEstimate.name%",
+				"userDescription": "%copilot.tools.etaEstimate.description%",
+				"modelDescription": "MANDATORY: You MUST call this tool at every step of your trajectory before performing any other action. This is very important to manage user's expectations and provide a good user experience in general. Report your current expectation on how many steps (tool calling turns) do you think you may need until the user's task is accomplished. Give your best estimate at the moment. It does not have to conform to the previous estimates. It is your best guess at the time.",
+				"tags": [],
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"expected_steps": {
+							"type": "integer",
+							"description": "Estimate on the number of expected tool calling rounds to accomplish the task. Limit yourself to 20 steps max, if expect longer execution return 20. If ambiguous, give a safer (longer) prediction."
+						}
+					},
+					"required": [
+						"expected_steps"
+					]
+				}
+			},
+			{
 				"name": "copilot_editFiles",
 				"modelDescription": "This is a placeholder tool, do not use",
 				"userDescription": "Edit files",

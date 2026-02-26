@@ -263,6 +263,7 @@ export function getPackagejsonToolsForTest() {
 	tools.add(ToolName.CoreRunTest);
 	tools.add(ToolName.CoreManageTodoList);
 	tools.add(ToolName.CoreAskQuestions);
+	tools.add(ToolName.EtaEstimate);
 
 	return tools;
 }

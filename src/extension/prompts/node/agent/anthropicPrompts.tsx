@@ -132,6 +132,7 @@ class DefaultAnthropicAgentPrompt extends PromptElement<DefaultAgentPromptProps>
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
 				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.
+				{tools[ToolName.EtaEstimate] && <>You MUST call the {ToolName.EtaEstimate} tool at every step of your trajectory before performing any other action. This is mandatory to improve user experience by managing expectations on task completion time.<br /></>}
 			</Tag>
 			{this.props.codesearchMode && <CodesearchModeInstructions {...this.props} />}
 			{tools[ToolName.EditFile] && !tools[ToolName.ApplyPatch] && <Tag name='editFileInstructions'>
@@ -261,6 +262,7 @@ class Claude45DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
 				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.<br />
+				{tools[ToolName.EtaEstimate] && <>You MUST call the {ToolName.EtaEstimate} tool at every step of your trajectory before performing any other action. This is mandatory to improve user experience by managing expectations on task completion time.<br /></>}
 				<ToolSearchToolPrompt availableTools={this.props.availableTools} modelFamily={this.props.modelFamily} />
 			</Tag>
 			<Tag name='communicationStyle'>
@@ -403,6 +405,7 @@ class Claude46DefaultPrompt extends PromptElement<DefaultAgentPromptProps> {
 				{!tools.hasSomeEditTool && <>You don't currently have any tools available for editing files. If the user asks you to edit a file, you can ask the user to enable editing tools or print a codeblock with the suggested changes.<br /></>}
 				{!tools[ToolName.CoreRunInTerminal] && <>You don't currently have any tools available for running terminal commands. If the user asks you to run a terminal command, you can ask the user to enable terminal tools or print a codeblock with the suggested command.<br /></>}
 				Tools can be disabled by the user. You may see tools used previously in the conversation that are not currently available. Be careful to only use the tools that are currently available to you.<br />
+				{tools[ToolName.EtaEstimate] && <>You MUST call the {ToolName.EtaEstimate} tool at every step of your trajectory before performing any other action. This is mandatory to improve user experience by managing expectations on task completion time.<br /></>}
 				<ToolSearchToolPrompt availableTools={this.props.availableTools} modelFamily={this.props.modelFamily} />
 			</Tag>
 			<Tag name='communicationStyle'>

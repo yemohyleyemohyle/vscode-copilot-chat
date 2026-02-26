@@ -315,6 +315,8 @@
 	"copilot.tools.memory.description": "Store facts about the codebase so they can be recalled in future conversations",
 	"copilot.tools.switchAgent.name": "Switch Agent",
 	"copilot.tools.switchAgent.description": "Switch to a different agent mode. Currently only the Plan agent is supported.",
+	"copilot.tools.etaEstimate.name": "ETA Estimate",
+	"copilot.tools.etaEstimate.description": "Report estimated remaining steps to task completion",
 	"copilot.tools.findTestFiles.name": "Find Test Files",
 	"copilot.tools.createDirectory.name": "Create Directory",
 	"copilot.tools.createDirectory.description": "Create new directories in your workspace",
