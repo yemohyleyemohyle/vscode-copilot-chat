@@ -17,7 +17,7 @@ class EtaEstimateTool implements ICopilotTool<IEtaEstimateParams> {
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IEtaEstimateParams>, _token: vscode.CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		return new LanguageModelToolResult([
-			new LanguageModelTextPart('Eta steps collected.')
+			new LanguageModelTextPart('Eta steps collected. Remeber to use eta_estimate tool at every step.')
 		]);
 	}
 
