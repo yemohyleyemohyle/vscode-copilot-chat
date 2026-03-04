@@ -100,7 +100,7 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 						agentName: parsedQuery.participantName || '',
 						intentId: (!parsedQuery.participantName && parsedQuery.command) ? parsedQuery.command :
 							parsedQuery.command ? agentsToCommands[parsedQuery.participantName as Intent]![parsedQuery.command] :
-								parsedQuery.participantName,
+								(parsedQuery.participantName || Intent.Agent),
 					},
 					() => false,
 					undefined,
