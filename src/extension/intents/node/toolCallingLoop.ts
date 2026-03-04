@@ -251,6 +251,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			modeInstructions: this.options.request.modeInstructions2,
 			additionalHookContext: this.additionalHookContext,
 		};
+		// DIAGNOSTIC: trace modeInstructions2 propagation
+		this._logService.info(`[ToolCallingLoop] createPromptContext: modeInstructions2=${JSON.stringify(this.options.request.modeInstructions2 ? { name: this.options.request.modeInstructions2.name, hasContent: !!this.options.request.modeInstructions2.content } : undefined)}`);
+		return result;
 	}
 
 	protected abstract fetch(

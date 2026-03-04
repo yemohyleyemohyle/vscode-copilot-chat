@@ -175,6 +175,8 @@ export class AgentPrompt extends PromptElement<AgentPromptProps> {
 	}
 
 	private async getAgentCustomInstructions() {
+		// DIAGNOSTIC: trace modeInstructions propagation
+		console.error(`[AgentPrompt] getAgentCustomInstructions: modeInstructions=${JSON.stringify(this.props.promptContext.modeInstructions ? { name: this.props.promptContext.modeInstructions.name, hasContent: !!this.props.promptContext.modeInstructions.content, contentLen: this.props.promptContext.modeInstructions.content?.length } : undefined)}`);
 		const putCustomInstructionsInSystemMessage = this.configurationService.getConfig(ConfigKey.CustomInstructionsInSystemMessage);
 		const customInstructionsBodyParts: PromptPiece[] = [];
 		customInstructionsBodyParts.push(
