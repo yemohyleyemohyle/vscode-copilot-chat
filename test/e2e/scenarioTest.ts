@@ -81,7 +81,12 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 					content: planBody + automationOverride,
 					isBuiltin: false,
 				};
+				// DIAGNOSTIC: verify injection at source
+				console.error(`[scenarioTest] planBody type=${typeof planBody}, len=${planBody?.length}, planModeInstructions.name=${planModeInstructions.name}, content len=${planModeInstructions.content?.length}`);
+				// Set globalThis fallback in case request property pipeline loses the value
+				(globalThis as any).__copilot_plan_mode_instructions = planModeInstructions;
 				const request: ChatRequest = { prompt: parsedQuery.query, references: parsedQuery.variables, command: parsedQuery.command, location: ChatLocation.Panel, location2: undefined, attempt: 0, enableCommandDetection: false, isParticipantDetected: false, toolReferences: parsedQuery.toolReferences, toolInvocationToken: undefined as never, model: null!, tools: new Map(), id: '1', sessionId: '1', sessionResource: Uri.parse('chat:/1'), hasHooksEnabled: false, modeInstructions2: planModeInstructions };
+				console.error(`[scenarioTest] request.modeInstructions2=${typeof request.modeInstructions2}, name=${request.modeInstructions2?.name}, hasContent=${!!request.modeInstructions2?.content}`);
 				if (testCase.tools) {
 					for (const [toolName, shouldUse] of Object.entries(testCase.tools)) {
 						request.tools.set({ name: getContributedToolName(toolName) } as LanguageModelToolInformation, shouldUse);

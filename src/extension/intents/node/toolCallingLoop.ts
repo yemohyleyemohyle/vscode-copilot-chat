@@ -248,11 +248,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			},
 			isContinuation,
 			hasStopHookQuery,
-			modeInstructions: this.options.request.modeInstructions2,
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any -- globalThis fallback for simulation plan mode injection
+			modeInstructions: this.options.request.modeInstructions2 ?? (globalThis as any).__copilot_plan_mode_instructions,
 			additionalHookContext: this.additionalHookContext,
 		};
 		// DIAGNOSTIC: trace modeInstructions2 propagation
-		console.error(`[ToolCallingLoop] createPromptContext: modeInstructions2=${JSON.stringify(this.options.request.modeInstructions2 ? { name: this.options.request.modeInstructions2.name, hasContent: !!this.options.request.modeInstructions2.content } : undefined)}, keys=${Object.keys(this.options.request).filter(k => k.includes('mode')).join(',')}`);
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any -- diagnostic
+		console.error(`[ToolCallingLoop] createPromptContext: modeInstructions2=${JSON.stringify(this.options.request.modeInstructions2 ? { name: this.options.request.modeInstructions2.name, hasContent: !!this.options.request.modeInstructions2.content } : undefined)}, globalFallback=${!!(globalThis as any).__copilot_plan_mode_instructions}, resultModeInstructions=${JSON.stringify(result.modeInstructions ? { name: result.modeInstructions.name, hasContent: !!result.modeInstructions.content } : undefined)}`);
 		return result;
 	}
 
