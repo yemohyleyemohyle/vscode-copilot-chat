@@ -178,7 +178,10 @@ export class ChatParticipantRequestHandler {
 
 		const newVariables = coalesce(await Promise.all(variablePromises));
 
-		return { ...this.request, references: newVariables };
+		const sanitized = { ...this.request, references: newVariables };
+		// DIAGNOSTIC: check modeInstructions2 survives spread
+		console.error(`[ChatParticipantRequestHandler] sanitizeVariables: before.modeInstructions2=${!!this.request.modeInstructions2}, after.modeInstructions2=${!!sanitized.modeInstructions2}, requestKeys=${Object.keys(this.request).filter(k => k.includes('mode')).join(',')}`);
+		return sanitized;
 	}
 
 	private async _shouldAskForPermissiveAuth(): Promise<boolean> {

@@ -309,6 +309,8 @@ export class DefaultIntentRequestHandler {
 	}
 
 	private async runWithToolCalling(intentInvocation: IIntentInvocation): Promise<IInternalRequestResult> {
+		// DIAGNOSTIC: check modeInstructions2 on the request passed to tool calling loop
+		console.error(`[DefaultIntentRequestHandler] runWithToolCalling: modeInstructions2=${!!this.request.modeInstructions2}, requestKeys=${Object.keys(this.request).filter(k => k.includes('mode')).join(',')}`);
 		const store = new DisposableStore();
 		const loop = this._loop = store.add(this._instantiationService.createInstance(
 			DefaultToolCallingLoop,

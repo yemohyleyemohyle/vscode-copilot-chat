@@ -230,7 +230,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		// exclude turns from the history that errored due to prompt filtration
 		const history = this.options.conversation.turns.slice(0, -1).filter(turn => turn.responseStatus !== TurnStatus.PromptFiltered);
 
-		return {
+		const result: Mutable<IBuildPromptContext> = {
 			requestId: this.turn.id,
 			query,
 			history,
@@ -252,7 +252,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			additionalHookContext: this.additionalHookContext,
 		};
 		// DIAGNOSTIC: trace modeInstructions2 propagation
-		this._logService.info(`[ToolCallingLoop] createPromptContext: modeInstructions2=${JSON.stringify(this.options.request.modeInstructions2 ? { name: this.options.request.modeInstructions2.name, hasContent: !!this.options.request.modeInstructions2.content } : undefined)}`);
+		console.error(`[ToolCallingLoop] createPromptContext: modeInstructions2=${JSON.stringify(this.options.request.modeInstructions2 ? { name: this.options.request.modeInstructions2.name, hasContent: !!this.options.request.modeInstructions2.content } : undefined)}, keys=${Object.keys(this.options.request).filter(k => k.includes('mode')).join(',')}`);
 		return result;
 	}
 
