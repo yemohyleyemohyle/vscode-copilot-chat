@@ -376,6 +376,7 @@ export async function simulateEditingScenario(
 				isBuiltin: false,
 			};
 			(globalThis as any).__copilot_plan_mode_instructions = planModeInstructions;
+			console.error(`[inlineChatSimulator] plan injection: planBody.length=${planBody?.length}, globalThis set=${!!(globalThis as any).__copilot_plan_mode_instructions}`);
 			let request: vscode.ChatRequest = {
 				location,
 				location2,
