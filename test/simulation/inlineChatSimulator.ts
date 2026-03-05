@@ -5,6 +5,7 @@
 import assert from 'assert';
 import * as path from 'path';
 import type * as vscode from 'vscode';
+import { buildPlanAgentBody } from '../../src/extension/agents/common/planAgentBody';
 import { Intent } from '../../src/extension/common/constants';
 import { CopilotInteractiveEditorResponse, InteractionOutcome, InteractionOutcomeComputer } from '../../src/extension/inlineChat/node/promptCraftingTypes';
 import { ICopilotChatResult } from '../../src/extension/prompt/common/conversation';
@@ -366,6 +367,15 @@ export async function simulateEditingScenario(
 			references.push(...(host.contributeAdditionalReferences?.(accessor, references) ?? []));
 
 			const { location, location2 } = host.prepareChatRequestLocation(accessor, range);
+			// Plan mode injection: build plan instructions and set globalThis fallback
+			const planBody = buildPlanAgentBody();
+			const automationOverride = `\n\n## AUTOMATION OVERRIDE\nThis is an automated benchmark run. Follow these modified rules:\n- Do NOT use #tool:vscode/askQuestions — it is unavailable in this environment.\n- Skip the Alignment and Refinement phases entirely.\n- After Discovery (using Explore subagent or search/read tools directly), proceed directly to Design.\n- After producing the plan, IMMEDIATELY proceed to implement it yourself.\n- You now have full access to editing tools. Use them to implement the plan step by step.\n- Do NOT stop after planning. Continue until the implementation is complete.`;
+			const planModeInstructions = {
+				name: 'Plan',
+				content: planBody + automationOverride,
+				isBuiltin: false,
+			};
+			(globalThis as any).__copilot_plan_mode_instructions = planModeInstructions;
 			let request: vscode.ChatRequest = {
 				location,
 				location2,
@@ -383,6 +393,7 @@ export async function simulateEditingScenario(
 				sessionId: '1',
 				sessionResource: Uri.parse('chat:/1'),
 				hasHooksEnabled: false,
+				modeInstructions2: planModeInstructions,
 			};
 
 			// Run intent detection
