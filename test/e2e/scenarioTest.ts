@@ -74,16 +74,14 @@ export function generateScenarioTestRunner(scenario: Scenario, evaluator: Scenar
 
 				const parsedQuery = await parseQueryForScenarioTest(accessor, testCase, simulationWorkspace);
 				const participantId = (parsedQuery.participantName && getChatParticipantIdFromName(parsedQuery.participantName)) ?? '';
-				const request: ChatRequest = { prompt: parsedQuery.query, references: parsedQuery.variables, command: parsedQuery.command, location: ChatLocation.Panel, location2: undefined, attempt: 0, enableCommandDetection: false, isParticipantDetected: false, toolReferences: parsedQuery.toolReferences, toolInvocationToken: undefined as never, model: null!, tools: new Map(), id: '1', sessionId: '1', sessionResource: Uri.parse('chat:/1'), hasHooksEnabled: false };
-				{
-					const planBody = buildPlanAgentBody();
-					const automationOverride = `\n\n## AUTOMATION OVERRIDE\nThis is an automated benchmark run. Follow these modified rules:\n- Do NOT use #tool:vscode/askQuestions — it is unavailable in this environment.\n- Skip the Alignment and Refinement phases entirely.\n- After Discovery (using Explore subagent or search/read tools directly), proceed directly to Design.\n- After producing the plan, IMMEDIATELY proceed to implement it yourself.\n- You now have full access to editing tools. Use them to implement the plan step by step.\n- Do NOT stop after planning. Continue until the implementation is complete.`;
-					(request as any).modeInstructions2 = {
-						name: 'Plan',
-						content: planBody + automationOverride,
-						isBuiltin: false,
-					};
-				}
+				const planBody = buildPlanAgentBody();
+				const automationOverride = `\n\n## AUTOMATION OVERRIDE\nThis is an automated benchmark run. Follow these modified rules:\n- Do NOT use #tool:vscode/askQuestions — it is unavailable in this environment.\n- Skip the Alignment and Refinement phases entirely.\n- After Discovery (using Explore subagent or search/read tools directly), proceed directly to Design.\n- After producing the plan, IMMEDIATELY proceed to implement it yourself.\n- You now have full access to editing tools. Use them to implement the plan step by step.\n- Do NOT stop after planning. Continue until the implementation is complete.`;
+				const planModeInstructions = {
+					name: 'Plan',
+					content: planBody + automationOverride,
+					isBuiltin: false,
+				};
+				const request: ChatRequest = { prompt: parsedQuery.query, references: parsedQuery.variables, command: parsedQuery.command, location: ChatLocation.Panel, location2: undefined, attempt: 0, enableCommandDetection: false, isParticipantDetected: false, toolReferences: parsedQuery.toolReferences, toolInvocationToken: undefined as never, model: null!, tools: new Map(), id: '1', sessionId: '1', sessionResource: Uri.parse('chat:/1'), hasHooksEnabled: false, modeInstructions2: planModeInstructions };
 				if (testCase.tools) {
 					for (const [toolName, shouldUse] of Object.entries(testCase.tools)) {
 						request.tools.set({ name: getContributedToolName(toolName) } as LanguageModelToolInformation, shouldUse);

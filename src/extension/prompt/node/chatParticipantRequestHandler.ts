@@ -180,7 +180,7 @@ export class ChatParticipantRequestHandler {
 
 		const sanitized = { ...this.request, references: newVariables };
 		// DIAGNOSTIC: check modeInstructions2 survives spread
-		console.error(`[ChatParticipantRequestHandler] sanitizeVariables: before.modeInstructions2=${!!this.request.modeInstructions2}, after.modeInstructions2=${!!sanitized.modeInstructions2}, requestKeys=${Object.keys(this.request).filter(k => k.includes('mode')).join(',')}`);
+		console.error(`[ChatParticipantRequestHandler] sanitizeVariables: before.modeInstructions2=${typeof this.request.modeInstructions2}/${JSON.stringify(this.request.modeInstructions2 ? { name: this.request.modeInstructions2.name } : null)}, after=${typeof sanitized.modeInstructions2}/${JSON.stringify(sanitized.modeInstructions2 ? { name: sanitized.modeInstructions2.name } : null)}`);
 		return sanitized;
 	}
 
