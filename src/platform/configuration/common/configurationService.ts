@@ -1024,6 +1024,9 @@ export namespace ConfigKey {
 	/** Additional tools to enable for the Plan agent (additive to base tools) */
 	export const PlanAgentAdditionalTools = defineSetting<string[]>('chat.planAgent.additionalTools', ConfigType.Simple, []);
 
+	/** When enabled, automatically transitions from Plan mode to Agent mode after the plan is saved. Designed for unattended/container environments. */
+	export const PlanAgentAutoHandoff = defineSetting<boolean>('chat.planAgent.autoHandoff', ConfigType.Simple, false);
+
 	/** Model override for Implement agent (empty = use default) */
 	export const ImplementAgentModel = defineSetting<string>('chat.implementAgent.model', ConfigType.Simple, '');
 

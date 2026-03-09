@@ -67,6 +67,7 @@ export enum ToolName {
 	SearchSubagent = 'search_subagent',
 	CoreAskQuestions = 'vscode_askQuestions',
 	SwitchAgent = 'switch_agent',
+	StartImplementation = 'vscode_startImplementation',
 	ToolSearch = 'tool_search',
 }
 
@@ -215,6 +216,7 @@ export const toolCategories: Record<ToolName, ToolCategory> = {
 	[ToolName.CoreTerminalConfirmationTool]: ToolCategory.VSCodeInteraction,
 	[ToolName.CoreAskQuestions]: ToolCategory.VSCodeInteraction,
 	[ToolName.SwitchAgent]: ToolCategory.VSCodeInteraction,
+	[ToolName.StartImplementation]: ToolCategory.VSCodeInteraction,
 	[ToolName.Memory]: ToolCategory.VSCodeInteraction,
 	[ToolName.ToolSearch]: ToolCategory.Core,
 } as const;

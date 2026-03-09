@@ -362,6 +362,74 @@ suite('PlanAgentProvider', () => {
 
 		assert.equal(eventFired, true);
 	});
+
+	test('fires onDidChangeCustomAgents when autoHandoff setting changes', async () => {
+		const provider = createProvider();
+
+		let eventFired = false;
+		provider.onDidChangeCustomAgents(() => {
+			eventFired = true;
+		});
+
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAutoHandoff, true);
+
+		assert.equal(eventFired, true);
+	});
+
+	test('includes startImplementation tool when autoHandoff is enabled', async () => {
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAutoHandoff, true);
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		assert.equal(agents.length, 1);
+		const content = await getAgentContent(agents[0]);
+
+		assert.ok(content.includes('vscode/startImplementation'), 'Should include startImplementation tool');
+	});
+
+	test('does not include askQuestions tool when autoHandoff is enabled', async () => {
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAutoHandoff, true);
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		assert.equal(agents.length, 1);
+		const content = await getAgentContent(agents[0]);
+
+		// Check the tools list in frontmatter — askQuestions should not be there
+		const toolsMatch = content.match(/tools: \[([^\]]+)\]/);
+		assert.ok(toolsMatch, 'Tools list not found');
+		assert.ok(!toolsMatch[1].includes('vscode/askQuestions'), 'Should not include askQuestions tool in auto-handoff mode');
+	});
+
+	test('uses unattended agent body when autoHandoff is enabled', async () => {
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAutoHandoff, true);
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		assert.equal(agents.length, 1);
+		const content = await getAgentContent(agents[0]);
+
+		assert.ok(content.includes('UNATTENDED mode'), 'Should contain UNATTENDED mode instructions');
+		assert.ok(content.includes('vscode/startImplementation'), 'Should reference startImplementation tool in body');
+		assert.ok(!content.includes('#tool:vscode/askQuestions'), 'Should not reference askQuestions in auto-handoff body');
+	});
+
+	test('uses interactive agent body when autoHandoff is disabled', async () => {
+		await mockConfigurationService.setConfig(ConfigKey.PlanAgentAutoHandoff, false);
+
+		const provider = createProvider();
+		const agents = await provider.provideCustomAgents({}, {} as any);
+
+		assert.equal(agents.length, 1);
+		const content = await getAgentContent(agents[0]);
+
+		assert.ok(content.includes('pairing with the user'), 'Should contain interactive mode instructions');
+		assert.ok(content.includes('#tool:vscode/askQuestions'), 'Should reference askQuestions in interactive body');
+		assert.ok(!content.includes('UNATTENDED mode'), 'Should not contain UNATTENDED mode instructions');
+	});
 });
 
 suite('buildAgentMarkdown', () => {

@@ -3833,6 +3833,15 @@
 							"experimental"
 						]
 					},
+					"github.copilot.chat.planAgent.autoHandoff": {
+						"type": "boolean",
+						"default": false,
+						"scope": "resource",
+						"markdownDescription": "%github.copilot.config.planAgent.autoHandoff%",
+						"tags": [
+							"experimental"
+						]
+					},
 					"github.copilot.chat.implementAgent.model": {
 						"type": "string",
 						"default": "",

@@ -63,7 +63,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 			if (e.affectsConfiguration(ConfigKey.PlanAgentAdditionalTools.fullyQualifiedId) ||
 				e.affectsConfiguration(ConfigKey.Deprecated.PlanAgentModel.fullyQualifiedId) ||
 				e.affectsConfiguration('chat.planAgent.defaultModel') ||
-				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId)) {
+				e.affectsConfiguration(ConfigKey.ImplementAgentModel.fullyQualifiedId) ||
+				e.affectsConfiguration(ConfigKey.PlanAgentAutoHandoff.fullyQualifiedId)) {
 				this._onDidChangeCustomAgents.fire();
 			}
 		}));
@@ -103,12 +104,16 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		return fileUri;
 	}
 
-	static buildAgentBody(): string {
+	static buildAgentBody(autoHandoff: boolean = false): string {
 		const discoverySection = `## 1. Discovery
 
 Run the *Explore* subagent to gather context, analogous existing features to use as implementation templates, and potential blockers or ambiguities. When the task spans multiple independent areas (e.g., frontend + backend, different features, separate repos), launch **2-3 *Explore* subagents in parallel** — one per area — to speed up discovery.
 
 Update the plan with your findings.`;
+
+		if (autoHandoff) {
+			return PlanAgentProvider.buildAutoHandoffAgentBody(discoverySection);
+		}
 
 		return `You are a PLANNING AGENT, pairing with the user to create a detailed, actionable plan.
 
@@ -195,10 +200,81 @@ Rules:
 </plan_style_guide>`;
 	}
 
+	private static buildAutoHandoffAgentBody(discoverySection: string): string {
+		return `You are a PLANNING AGENT operating in UNATTENDED mode. Your job is to research the codebase, create a detailed actionable plan, and then hand off to the implementation agent automatically.
+
+You research the codebase → make reasonable decisions → capture findings into a comprehensive plan → hand off to the implementation agent.
+
+Your SOLE responsibility is planning. NEVER start implementation yourself.
+
+**Current plan**: \`/memories/session/plan.md\` - update using #tool:vscode/memory.
+
+<rules>
+- STOP if you consider running file editing tools — plans are for others to execute. The only write tool you have is #tool:vscode/memory for persisting plans.
+- Do NOT ask the user questions — this is an unattended run. Make reasonable assumptions and document them in the plan.
+- When facing ambiguity, choose the most conventional/standard approach and note your decision in the plan.
+- Present a well-researched plan with loose ends tied BEFORE handing off to implementation.
+- After saving the plan to \`/memories/session/plan.md\`, call #tool:vscode/startImplementation to begin implementation immediately.
+</rules>
+
+<workflow>
+Execute these phases sequentially. This is a streamlined, non-interactive workflow.
+
+${discoverySection}
+
+## 2. Design
+
+Once context is clear, draft a comprehensive implementation plan.
+
+The plan should reflect:
+- Structured concise enough to be scannable and detailed enough for effective execution
+- Step-by-step implementation with explicit dependencies — mark which steps can run in parallel vs. which block on prior steps
+- For plans with many steps, group into named phases that are each independently verifiable
+- Verification steps for validating the implementation, both automated and manual
+- Critical architecture to reuse or use as reference — reference specific functions, types, or patterns, not just file names
+- Critical files to be modified (with full paths)
+- Explicit scope boundaries — what's included and what's deliberately excluded
+- Document any assumptions made due to unattended mode
+- Leave no ambiguity
+
+Save the comprehensive plan document to \`/memories/session/plan.md\` via #tool:vscode/memory, then show the scannable plan to the user for the record.
+
+## 3. Handoff
+
+After saving the plan to \`/memories/session/plan.md\`, immediately call #tool:vscode/startImplementation to transition to Agent mode for implementation. Do NOT wait for user approval.
+</workflow>
+
+<plan_style_guide>
+\`\`\`markdown
+## Plan: {Title (2-10 words)}
+
+{TL;DR - what, why, and how (your recommended approach).}
+
+**Steps**
+1. {Implementation step-by-step — note dependency ("*depends on N*") or parallelism ("*parallel with step N*") when applicable}
+2. {For plans with 5+ steps, group steps into named phases with enough detail to be independently actionable}
+
+**Relevant files**
+- \`{full/path/to/file}\` — {what to modify or reuse, referencing specific functions/patterns}
+
+**Verification**
+1. {Verification steps for validating the implementation (**Specific** tasks, tests, commands, MCP tools, etc; not generic statements)}
+
+**Decisions & Assumptions**
+- {Decision, assumptions made in unattended mode, and included/excluded scope}
+\`\`\`
+
+Rules:
+- NO code blocks — describe changes, link to files and specific symbols/functions
+- The plan MUST be presented in the response before handoff.
+</plan_style_guide>`;
+	}
+
 	private buildCustomizedConfig(): AgentConfig {
 		const additionalTools = this.configurationService.getConfig(ConfigKey.PlanAgentAdditionalTools);
 		const coreDefaultModel = this.configurationService.getNonExtensionConfig<string>('chat.planAgent.defaultModel');
 		const modelOverride = coreDefaultModel || this.configurationService.getConfig(ConfigKey.Deprecated.PlanAgentModel);
+		const autoHandoff = this.configurationService.getConfig(ConfigKey.PlanAgentAutoHandoff);
 
 		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
 
@@ -222,8 +298,14 @@ Rules:
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
 
-		// Always include askQuestions tool (now provided by core)
-		toolsToAdd.push('vscode/askQuestions');
+		if (autoHandoff) {
+			// In auto-handoff mode, add the startImplementation tool
+			// and skip askQuestions (no user to answer)
+			toolsToAdd.push('vscode/startImplementation');
+		} else {
+			// Always include askQuestions tool in interactive mode (now provided by core)
+			toolsToAdd.push('vscode/askQuestions');
+		}
 
 		// Merge additional tools (deduplicated)
 		const tools = toolsToAdd.length > 0
@@ -235,7 +317,7 @@ Rules:
 			...BASE_PLAN_AGENT_CONFIG,
 			tools,
 			handoffs: [startImplementationHandoff, openInEditorHandoff, ...(BASE_PLAN_AGENT_CONFIG.handoffs ?? [])],
-			body: PlanAgentProvider.buildAgentBody(),
+			body: PlanAgentProvider.buildAgentBody(autoHandoff),
 			...(modelOverride ? { model: modelOverride } : {}),
 		};
 	}
