@@ -11,6 +11,7 @@ chatMode: Plan
 vscodeSettings:
     chat.planAgent.defaultModel: 'claude-sonnet-4'
     github.copilot.chat.implementAgent.model: 'claude-sonnet-4'
+    github.copilot.chat.exploreAgent.model: 'claude-sonnet-4'
     github.copilot.chat.planAgent.autoHandoff: true
     chat.tools.global.autoApprove: true
     chat.tools.terminal.autoReplyToPrompts: true
