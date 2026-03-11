@@ -1070,6 +1070,24 @@
 				}
 			},
 			{
+				"name": "copilot_startImplementation",
+				"toolReferenceName": "startImplementation",
+				"displayName": "%copilot.tools.startImplementation.name%",
+				"userDescription": "%copilot.tools.startImplementation.description%",
+				"modelDescription": "Transition from Plan mode to Agent mode and begin implementation. Call this tool ONLY after you have saved a comprehensive plan to /memories/session/plan.md via the memory tool. This tool switches the chat to Agent mode and sends a 'Start implementation' prompt so the implementation agent begins executing the plan automatically. Do NOT call this tool until the plan is fully saved.",
+				"when": "config.github.copilot.chat.planAgent.autoHandoff",
+				"icon": "$(play)",
+				"inputSchema": {
+					"type": "object",
+					"properties": {
+						"summary": {
+							"type": "string",
+							"description": "Optional brief summary of the plan to pass to the implementation agent."
+						}
+					}
+				}
+			},
+			{
 				"name": "copilot_memory",
 				"displayName": "Memory",
 				"toolReferenceName": "memory",

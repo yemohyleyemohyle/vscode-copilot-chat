@@ -109,6 +109,7 @@ export enum ContributedToolName {
 	ToolReplay = 'copilot_toolReplay',
 	EditFilesPlaceholder = 'copilot_editFiles',
 	SwitchAgent = 'copilot_switchAgent',
+	StartImplementation = 'copilot_startImplementation',
 }
 
 export const byokEditToolNamesToToolNames = {
