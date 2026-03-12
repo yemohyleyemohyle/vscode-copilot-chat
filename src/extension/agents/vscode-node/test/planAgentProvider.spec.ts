@@ -427,7 +427,7 @@ suite('PlanAgentProvider', () => {
 		const content = await getAgentContent(agents[0]);
 
 		assert.ok(content.includes('pairing with the user'), 'Should contain interactive mode instructions');
-		assert.ok(content.includes('#tool:vscode/askQuestions'), 'Should reference askQuestions in interactive body');
+		assert.ok(content.includes('vscode_askQuestions'), 'Should reference askQuestions in interactive body');
 		assert.ok(!content.includes('UNATTENDED mode'), 'Should not contain UNATTENDED mode instructions');
 	});
 });
