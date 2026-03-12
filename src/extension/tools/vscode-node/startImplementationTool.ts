@@ -56,16 +56,21 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 		// Switch model if implementAgent.model is configured
 		await this.switchModel();
 
-		// Switch to agent mode and send the implementation prompt.
-		// The plan is already persisted in /memories/session/plan.md,
-		// so agent mode will pick it up via MemoryContextPrompt.
-		await vscode.commands.executeCommand('workbench.action.chat.open', {
-			mode: 'agent',
-			query: 'Start implementation',
+		// Switch to agent mode within the current session (like SwitchAgentTool does).
+		// Using toggleAgentMode instead of chat.open because chat.open tries to open
+		// a new session, which gets dropped when called mid-request.
+		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', {
+			modeId: 'agent',
+			sessionResource: options.chatSessionResource,
 		});
 
 		return new LanguageModelToolResult([
-			new LanguageModelTextPart('Switched to Agent mode and sent "Start implementation" prompt. The plan from /memories/session/plan.md will be loaded automatically. Handing off to the implementation agent now.')
+			new LanguageModelTextPart(
+				'Switched to Agent mode. You are now the implementation agent. ' +
+				'Read the plan from /memories/session/plan.md and start implementing it immediately. ' +
+				'Use all available tools to make the code changes described in the plan. ' +
+				'This tool may no longer be available in the new agent.'
+			)
 		]);
 	}
 
