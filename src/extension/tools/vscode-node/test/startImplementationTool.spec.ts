@@ -6,17 +6,18 @@
 import { assert } from 'chai';
 import { afterEach, beforeEach, suite, test, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { TestLogService } from '../../../../platform/testing/common/testLogService';
 import { ToolName } from '../../common/toolNames';
 import { StartImplementationTool } from '../startImplementationTool';
 
 suite('StartImplementationTool', () => {
 	let tool: StartImplementationTool;
-	let executeCommandSpy: ReturnType<typeof vi.spyOn>;
-	let selectChatModelsSpy: ReturnType<typeof vi.spyOn>;
-	let getConfigurationSpy: ReturnType<typeof vi.spyOn>;
+	let executeCommandSpy: any;
+	let selectChatModelsSpy: any;
+	let getConfigurationSpy: any;
 
 	beforeEach(() => {
-		tool = new StartImplementationTool();
+		tool = new StartImplementationTool(new TestLogService());
 
 		executeCommandSpy = vi.spyOn(vscode.commands, 'executeCommand').mockResolvedValue(undefined as any);
 		selectChatModelsSpy = vi.spyOn(vscode.lm, 'selectChatModels').mockResolvedValue([] as any);

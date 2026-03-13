@@ -58,7 +58,6 @@ const shim: typeof vscodeTypes = {
 	ChatResponseProgressPart,
 	ChatResponseProgressPart2,
 	ChatResponseWarningPart,
-	ChatHookType: ChatHookType as any,
 	ChatResponseHookPart,
 	ChatResponseReferencePart,
 	ChatResponseReferencePart2,

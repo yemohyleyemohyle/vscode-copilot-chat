@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import { ILogService } from '../../../platform/log/common/logService';
 import { CancellationToken } from '../../../util/vs/base/common/cancellation';
 import { LanguageModelTextPart, LanguageModelToolResult, MarkdownString } from '../../../vscodeTypes';
 import { ToolName } from '../common/toolNames';
@@ -25,6 +26,10 @@ interface IStartImplementationParams {
 export class StartImplementationTool implements ICopilotTool<IStartImplementationParams> {
 	public static readonly toolName = ToolName.StartImplementation;
 
+	constructor(
+		@ILogService private readonly logService: ILogService,
+	) { }
+
 	/**
 	 * If the `implementAgent.model` setting is configured, resolve the corresponding
 	 * chat model so it can be applied during the mode transition.
@@ -35,26 +40,44 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 	async resolveImplementModel(): Promise<{ vendor: string; id: string; family: string } | undefined> {
 		const cfg = vscode.workspace.getConfiguration();
 		const modelId: string | undefined = cfg.get(IMPLEMENT_AGENT_MODEL_SETTING);
+		this.logService.info(`[StartImplementationTool] resolveImplementModel: setting '${IMPLEMENT_AGENT_MODEL_SETTING}' = '${modelId ?? '(not set)'}' `);
+
 		if (!modelId) {
+			this.logService.info('[StartImplementationTool] resolveImplementModel: no model configured, returning undefined');
 			return undefined;
 		}
 
 		// Try to resolve the model by id first, then fall back to family
 		let models = await vscode.lm.selectChatModels({ id: modelId, vendor: 'copilot' });
+		this.logService.info(`[StartImplementationTool] resolveImplementModel: selectChatModels({id: '${modelId}'}) returned ${models.length} model(s)`);
+
 		if (models.length === 0) {
 			models = await vscode.lm.selectChatModels({ family: modelId, vendor: 'copilot' });
+			this.logService.info(`[StartImplementationTool] resolveImplementModel: selectChatModels({family: '${modelId}'}) returned ${models.length} model(s)`);
 		}
 
 		if (models.length > 0) {
 			const model = models[0];
-			return { vendor: model.vendor, id: model.id, family: model.family };
+			const resolved = { vendor: model.vendor, id: model.id, family: model.family };
+			this.logService.info(`[StartImplementationTool] resolveImplementModel: resolved model = ${JSON.stringify(resolved)}`);
+			return resolved;
 		}
+
+		// Log all available models to help diagnose mismatches
+		const allModels = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+		this.logService.warn(
+			`[StartImplementationTool] resolveImplementModel: could not resolve '${modelId}'. ` +
+			`Available copilot models: ${allModels.map(m => `${m.id} (family=${m.family})`).join(', ') || '(none)'}`,
+		);
 		return undefined;
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IStartImplementationParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
+		this.logService.info('[StartImplementationTool] invoke: entry');
+
 		// Resolve the implement agent model before switching modes
 		const resolvedModel = await this.resolveImplementModel();
+		this.logService.info(`[StartImplementationTool] invoke: resolvedModel = ${resolvedModel ? JSON.stringify(resolvedModel) : 'undefined'}`);
 
 		// Switch to agent mode within the current session (like SwitchAgentTool does).
 		// Using toggleAgentMode instead of chat.open because chat.open tries to open
@@ -62,11 +85,14 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 		//
 		// Pass the model in the toggleAgentMode args so the mode transition and model
 		// switch happen atomically (mirroring how interactive handoff buttons work).
-		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', {
+		const toggleArgs = {
 			modeId: 'agent',
 			sessionResource: options.chatSessionResource,
 			...(resolvedModel ? { model: resolvedModel } : {}),
-		});
+		};
+		this.logService.info(`[StartImplementationTool] invoke: calling toggleAgentMode with args = ${JSON.stringify(toggleArgs)}`);
+		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', toggleArgs);
+		this.logService.info('[StartImplementationTool] invoke: toggleAgentMode completed');
 
 		// Also explicitly switch the model AFTER the mode transition as a fallback.
 		// The mode switch can reset the model to the session default, undoing any
@@ -74,7 +100,11 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 		// ensure the implement agent model sticks even if toggleAgentMode doesn't
 		// natively support the model parameter.
 		if (resolvedModel) {
+			this.logService.info(`[StartImplementationTool] invoke: calling changeModel with ${JSON.stringify(resolvedModel)}`);
 			await vscode.commands.executeCommand('workbench.action.chat.changeModel', resolvedModel);
+			this.logService.info('[StartImplementationTool] invoke: changeModel completed');
+		} else {
+			this.logService.info('[StartImplementationTool] invoke: no model override, skipping changeModel');
 		}
 
 		return new LanguageModelToolResult([
