@@ -26,14 +26,17 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 	public static readonly toolName = ToolName.StartImplementation;
 
 	/**
-	 * If the `implementAgent.model` setting is configured, switch the chat model
-	 * before opening agent mode so the implementation agent uses the right model.
+	 * If the `implementAgent.model` setting is configured, resolve the corresponding
+	 * chat model so it can be applied during the mode transition.
+	 *
+	 * @returns The resolved model info, or `undefined` if no override is configured
+	 *          or the model could not be found.
 	 */
-	private async switchModel(): Promise<void> {
+	async resolveImplementModel(): Promise<{ vendor: string; id: string; family: string } | undefined> {
 		const cfg = vscode.workspace.getConfiguration();
 		const modelId: string | undefined = cfg.get(IMPLEMENT_AGENT_MODEL_SETTING);
 		if (!modelId) {
-			return;
+			return undefined;
 		}
 
 		// Try to resolve the model by id first, then fall back to family
@@ -44,25 +47,35 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 
 		if (models.length > 0) {
 			const model = models[0];
-			await vscode.commands.executeCommand('workbench.action.chat.changeModel', {
-				vendor: model.vendor,
-				id: model.id,
-				family: model.family,
-			});
+			return { vendor: model.vendor, id: model.id, family: model.family };
 		}
+		return undefined;
 	}
 
 	async invoke(options: vscode.LanguageModelToolInvocationOptions<IStartImplementationParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
-		// Switch model if implementAgent.model is configured
-		await this.switchModel();
+		// Resolve the implement agent model before switching modes
+		const resolvedModel = await this.resolveImplementModel();
 
 		// Switch to agent mode within the current session (like SwitchAgentTool does).
 		// Using toggleAgentMode instead of chat.open because chat.open tries to open
 		// a new session, which gets dropped when called mid-request.
+		//
+		// Pass the model in the toggleAgentMode args so the mode transition and model
+		// switch happen atomically (mirroring how interactive handoff buttons work).
 		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', {
 			modeId: 'agent',
 			sessionResource: options.chatSessionResource,
+			...(resolvedModel ? { model: resolvedModel } : {}),
 		});
+
+		// Also explicitly switch the model AFTER the mode transition as a fallback.
+		// The mode switch can reset the model to the session default, undoing any
+		// prior changeModel call. By calling changeModel after toggleAgentMode, we
+		// ensure the implement agent model sticks even if toggleAgentMode doesn't
+		// natively support the model parameter.
+		if (resolvedModel) {
+			await vscode.commands.executeCommand('workbench.action.chat.changeModel', resolvedModel);
+		}
 
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(

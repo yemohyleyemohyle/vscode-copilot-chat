@@ -58,6 +58,7 @@ const shim: typeof vscodeTypes = {
 	ChatResponseProgressPart,
 	ChatResponseProgressPart2,
 	ChatResponseWarningPart,
+	ChatHookType: ChatHookType as any,
 	ChatResponseHookPart,
 	ChatResponseReferencePart,
 	ChatResponseReferencePart2,
@@ -130,6 +131,15 @@ const shim: typeof vscodeTypes = {
 	ChatSessionStatus,
 	authentication: {
 		getSession: async () => { throw new Error('authentication.getSession not mocked in test'); }
+	},
+	commands: {
+		executeCommand: async () => { throw new Error('commands.executeCommand not mocked in test'); }
+	},
+	workspace: {
+		getConfiguration: () => { throw new Error('workspace.getConfiguration not mocked in test'); }
+	},
+	lm: {
+		selectChatModels: async () => { throw new Error('lm.selectChatModels not mocked in test'); }
 	},
 	McpHttpServerDefinition,
 	McpStdioServerDefinition,
