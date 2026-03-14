@@ -28,6 +28,7 @@ suite('StartImplementationTool', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.useRealTimers();
 	});
 
 	test('has correct static toolName matching ToolName enum', () => {
@@ -109,12 +110,18 @@ suite('StartImplementationTool', () => {
 		} as any;
 		const fakeToken = {} as any;
 
+		beforeEach(() => {
+			// Stub scheduleDeferredResubmission to prevent real interval in tests
+			vi.spyOn(tool, 'scheduleDeferredResubmission').mockImplementation(() => { });
+		});
+
 		test('calls toggleAgentMode without model when no implement model is configured', async () => {
 			await tool.invoke(fakeOptions, fakeToken);
 
-			assert.equal(executeCommandSpy.mock.calls.length, 1);
-			assert.equal(executeCommandSpy.mock.calls[0][0], 'workbench.action.chat.toggleAgentMode');
-			assert.deepStrictEqual(executeCommandSpy.mock.calls[0][1], {
+			// toggleAgentMode only (no changeModel when no model configured)
+			const toggleCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.toggleAgentMode');
+			assert.equal(toggleCalls.length, 1);
+			assert.deepStrictEqual(toggleCalls[0][1], {
 				modeId: 'agent',
 				sessionResource: fakeOptions.chatSessionResource,
 			});
@@ -135,17 +142,18 @@ suite('StartImplementationTool', () => {
 			await tool.invoke(fakeOptions, fakeToken);
 
 			// Should have called toggleAgentMode with model
-			assert.equal(executeCommandSpy.mock.calls.length, 2);
-			assert.equal(executeCommandSpy.mock.calls[0][0], 'workbench.action.chat.toggleAgentMode');
-			assert.deepStrictEqual(executeCommandSpy.mock.calls[0][1], {
+			const toggleCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.toggleAgentMode');
+			assert.equal(toggleCalls.length, 1);
+			assert.deepStrictEqual(toggleCalls[0][1], {
 				modeId: 'agent',
 				sessionResource: fakeOptions.chatSessionResource,
 				model: { vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' },
 			});
 
 			// Should have called changeModel after toggleAgentMode
-			assert.equal(executeCommandSpy.mock.calls[1][0], 'workbench.action.chat.changeModel');
-			assert.deepStrictEqual(executeCommandSpy.mock.calls[1][1], {
+			const changeModelCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.changeModel');
+			assert.equal(changeModelCalls.length, 1);
+			assert.deepStrictEqual(changeModelCalls[0][1], {
 				vendor: 'copilot',
 				id: 'claude-opus-4.6',
 				family: 'claude-opus',
@@ -162,12 +170,10 @@ suite('StartImplementationTool', () => {
 			await tool.invoke(fakeOptions, fakeToken);
 
 			// Only toggleAgentMode, no changeModel
-			assert.equal(executeCommandSpy.mock.calls.length, 1);
-			assert.equal(executeCommandSpy.mock.calls[0][0], 'workbench.action.chat.toggleAgentMode');
-			assert.deepStrictEqual(executeCommandSpy.mock.calls[0][1], {
-				modeId: 'agent',
-				sessionResource: fakeOptions.chatSessionResource,
-			});
+			const toggleCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.toggleAgentMode');
+			const changeModelCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.changeModel');
+			assert.equal(toggleCalls.length, 1);
+			assert.equal(changeModelCalls.length, 0);
 		});
 
 		test('calls toggleAgentMode before changeModel (correct order)', async () => {
@@ -192,9 +198,105 @@ suite('StartImplementationTool', () => {
 			]);
 		});
 
-		test('returns tool result with instructions for the implementation agent', async () => {
+		test('schedules deferred resubmission', async () => {
+			await tool.invoke(fakeOptions, fakeToken);
+			assert.equal((tool.scheduleDeferredResubmission as any).mock.calls.length, 1);
+		});
+
+		test('returns tool result instructing the LLM to stop', async () => {
 			const result = await tool.invoke(fakeOptions, fakeToken);
 			assert.ok(result);
+			// The result should tell the LLM to stop, not continue implementing
+			const content = (result as any).content ?? (result as any)._content;
+			if (content) {
+				const text = content[0]?.value ?? content[0]?.text ?? '';
+				assert.include(text, 'Do NOT call any more tools');
+			}
+		});
+	});
+
+	suite('scheduleDeferredResubmission', () => {
+		test('submits implementation request after poll interval', async () => {
+			vi.useFakeTimers();
+			const submitSpy = vi.spyOn(tool as any, 'submitImplementationRequest').mockResolvedValue(undefined);
+
+			tool.scheduleDeferredResubmission();
+
+			// Should not have submitted yet
+			assert.equal(submitSpy.mock.calls.length, 0);
+
+			// Advance past the poll interval
+			await vi.advanceTimersByTimeAsync(500);
+
+			// Should have attempted submission
+			assert.equal(submitSpy.mock.calls.length, 1);
+		});
+
+		test('retries on failure', async () => {
+			vi.useFakeTimers();
+			let callCount = 0;
+			const submitSpy = vi.spyOn(tool as any, 'submitImplementationRequest').mockImplementation(async () => {
+				callCount++;
+				if (callCount === 1) {
+					throw new Error('Not ready yet');
+				}
+			});
+
+			tool.scheduleDeferredResubmission();
+
+			// First attempt fails
+			await vi.advanceTimersByTimeAsync(500);
+			assert.equal(submitSpy.mock.calls.length, 1);
+
+			// Second attempt succeeds
+			await vi.advanceTimersByTimeAsync(500);
+			assert.equal(submitSpy.mock.calls.length, 2);
+		});
+
+		test('times out after max duration', async () => {
+			vi.useFakeTimers();
+			vi.spyOn(tool as any, 'submitImplementationRequest').mockRejectedValue(new Error('Always fails'));
+
+			tool.scheduleDeferredResubmission();
+
+			// Advance well past timeout (30s)
+			await vi.advanceTimersByTimeAsync(31_000);
+
+			// Should have stopped trying (interval cleared)
+			const callsBefore = (tool as any).submitImplementationRequest.mock.calls.length;
+			await vi.advanceTimersByTimeAsync(5_000);
+			const callsAfter = (tool as any).submitImplementationRequest.mock.calls.length;
+			assert.equal(callsBefore, callsAfter);
+		});
+
+		test('submits correct sequence of commands', async () => {
+			const commandCalls: string[] = [];
+			executeCommandSpy.mockImplementation(async (command: string) => {
+				commandCalls.push(command);
+			});
+
+			// Call the private method directly
+			await (tool as any).submitImplementationRequest();
+
+			assert.deepStrictEqual(commandCalls, [
+				'workbench.panel.chat.view.copilot.focus',
+				'type',
+				'workbench.action.chat.submit',
+			]);
+		});
+
+		test('passes correct text to type command', async () => {
+			const typeArgs: any[] = [];
+			executeCommandSpy.mockImplementation(async (command: string, args: any) => {
+				if (command === 'type') {
+					typeArgs.push(args);
+				}
+			});
+
+			await (tool as any).submitImplementationRequest();
+
+			assert.equal(typeArgs.length, 1);
+			assert.deepStrictEqual(typeArgs[0], { text: 'Start implementation' });
 		});
 	});
 });
