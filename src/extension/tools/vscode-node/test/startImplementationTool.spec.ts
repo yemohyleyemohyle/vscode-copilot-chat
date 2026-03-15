@@ -110,12 +110,7 @@ suite('StartImplementationTool', () => {
 		} as any;
 		const fakeToken = {} as any;
 
-		beforeEach(() => {
-			// Stub scheduleDeferredResubmission to prevent real interval in tests
-			vi.spyOn(tool, 'scheduleDeferredResubmission').mockImplementation(() => { });
-		});
-
-		test('calls toggleAgentMode without model when no implement model is configured', async () => {
+		test('calls toggleAgentMode with prompt and send when no implement model is configured', async () => {
 			await tool.invoke(fakeOptions, fakeToken);
 
 			// toggleAgentMode only (no changeModel when no model configured)
@@ -124,10 +119,12 @@ suite('StartImplementationTool', () => {
 			assert.deepStrictEqual(toggleCalls[0][1], {
 				modeId: 'agent',
 				sessionResource: fakeOptions.chatSessionResource,
+				prompt: 'Start implementation',
+				send: true,
 			});
 		});
 
-		test('passes model in toggleAgentMode and calls changeModel after when implement model is configured', async () => {
+		test('passes model, prompt, and send in toggleAgentMode and calls changeModel after when implement model is configured', async () => {
 			getConfigurationSpy.mockReturnValue({
 				get: () => 'claude-opus-4.6',
 			} as any);
@@ -141,12 +138,14 @@ suite('StartImplementationTool', () => {
 
 			await tool.invoke(fakeOptions, fakeToken);
 
-			// Should have called toggleAgentMode with model
+			// Should have called toggleAgentMode with model, prompt, and send
 			const toggleCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.toggleAgentMode');
 			assert.equal(toggleCalls.length, 1);
 			assert.deepStrictEqual(toggleCalls[0][1], {
 				modeId: 'agent',
 				sessionResource: fakeOptions.chatSessionResource,
+				prompt: 'Start implementation',
+				send: true,
 				model: { vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' },
 			});
 
@@ -198,9 +197,18 @@ suite('StartImplementationTool', () => {
 			]);
 		});
 
-		test('schedules deferred resubmission', async () => {
+		test('does not schedule deferred resubmission', async () => {
+			// The old implementation used scheduleDeferredResubmission, which caused
+			// race conditions. The new implementation uses prompt + send in toggleArgs.
 			await tool.invoke(fakeOptions, fakeToken);
-			assert.equal((tool.scheduleDeferredResubmission as any).mock.calls.length, 1);
+
+			// Only toggleAgentMode should be called (no focus/type/submit commands)
+			const focusCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.panel.chat.view.copilot.focus');
+			const typeCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'type');
+			const submitCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.submit');
+			assert.equal(focusCalls.length, 0);
+			assert.equal(typeCalls.length, 0);
+			assert.equal(submitCalls.length, 0);
 		});
 
 		test('returns tool result instructing the LLM to stop', async () => {
@@ -212,91 +220,6 @@ suite('StartImplementationTool', () => {
 				const text = content[0]?.value ?? content[0]?.text ?? '';
 				assert.include(text, 'Do NOT call any more tools');
 			}
-		});
-	});
-
-	suite('scheduleDeferredResubmission', () => {
-		test('submits implementation request after poll interval', async () => {
-			vi.useFakeTimers();
-			const submitSpy = vi.spyOn(tool as any, 'submitImplementationRequest').mockResolvedValue(undefined);
-
-			tool.scheduleDeferredResubmission();
-
-			// Should not have submitted yet
-			assert.equal(submitSpy.mock.calls.length, 0);
-
-			// Advance past the poll interval
-			await vi.advanceTimersByTimeAsync(500);
-
-			// Should have attempted submission
-			assert.equal(submitSpy.mock.calls.length, 1);
-		});
-
-		test('retries on failure', async () => {
-			vi.useFakeTimers();
-			let callCount = 0;
-			const submitSpy = vi.spyOn(tool as any, 'submitImplementationRequest').mockImplementation(async () => {
-				callCount++;
-				if (callCount === 1) {
-					throw new Error('Not ready yet');
-				}
-			});
-
-			tool.scheduleDeferredResubmission();
-
-			// First attempt fails
-			await vi.advanceTimersByTimeAsync(500);
-			assert.equal(submitSpy.mock.calls.length, 1);
-
-			// Second attempt succeeds
-			await vi.advanceTimersByTimeAsync(500);
-			assert.equal(submitSpy.mock.calls.length, 2);
-		});
-
-		test('times out after max duration', async () => {
-			vi.useFakeTimers();
-			vi.spyOn(tool as any, 'submitImplementationRequest').mockRejectedValue(new Error('Always fails'));
-
-			tool.scheduleDeferredResubmission();
-
-			// Advance well past timeout (30s)
-			await vi.advanceTimersByTimeAsync(31_000);
-
-			// Should have stopped trying (interval cleared)
-			const callsBefore = (tool as any).submitImplementationRequest.mock.calls.length;
-			await vi.advanceTimersByTimeAsync(5_000);
-			const callsAfter = (tool as any).submitImplementationRequest.mock.calls.length;
-			assert.equal(callsBefore, callsAfter);
-		});
-
-		test('submits correct sequence of commands', async () => {
-			const commandCalls: string[] = [];
-			executeCommandSpy.mockImplementation(async (command: string) => {
-				commandCalls.push(command);
-			});
-
-			// Call the private method directly
-			await (tool as any).submitImplementationRequest();
-
-			assert.deepStrictEqual(commandCalls, [
-				'workbench.panel.chat.view.copilot.focus',
-				'type',
-				'workbench.action.chat.submit',
-			]);
-		});
-
-		test('passes correct text to type command', async () => {
-			const typeArgs: any[] = [];
-			executeCommandSpy.mockImplementation(async (command: string, args: any) => {
-				if (command === 'type') {
-					typeArgs.push(args);
-				}
-			});
-
-			await (tool as any).submitImplementationRequest();
-
-			assert.equal(typeArgs.length, 1);
-			assert.deepStrictEqual(typeArgs[0], { text: 'Start implementation' });
 		});
 	});
 });
