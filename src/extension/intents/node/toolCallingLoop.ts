@@ -913,27 +913,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 		}
 
-		// Propagate nextQuestion from StartImplementation tool metadata onto
-		// chatResult so VS Code core auto-submits the follow-up in the same
-		// session with full conversation history.
-		for (const round of this.toolCallRounds) {
-			for (const toolCall of round.toolCalls) {
-				if (toolCall.name === ToolName.StartImplementation) {
-					const toolResult = this.toolCallResults[toolCall.id];
-					const metadata = toolResult && 'toolMetadata' in toolResult
-						? toolResult.toolMetadata as { nextQuestion?: { prompt: string } } | undefined
-						: undefined;
-					if (metadata?.nextQuestion) {
-						lastResult.chatResult = {
-							...lastResult.chatResult,
-							nextQuestion: metadata.nextQuestion,
-						};
-						this._logService.info(`[ToolCallingLoop] Propagated nextQuestion from ${ToolName.StartImplementation}: "${metadata.nextQuestion.prompt}"`);
-					}
-				}
-			}
-		}
-
 		return { ...lastResult, toolCallRounds: this.toolCallRounds, toolCallResults: this.toolCallResults };
 	}
 
