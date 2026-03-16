@@ -132,7 +132,7 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(
 				'Planning phase completed successfully. The session mode has been switched to Agent for implementation. ' +
-				'This tool call marks the end of the planning turn — conclude your planning response now.'
+				'This tool call marks the end of the planning turn — conclude your planning response now untill user\'s conformation to start implementation.'
 			)
 		]);
 	}
