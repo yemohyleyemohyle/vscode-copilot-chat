@@ -222,13 +222,14 @@ suite('StartImplementationTool', () => {
 			assert.equal(spy.mock.calls[0][0], undefined);
 		});
 
-		test('returns tool result instructing the LLM to stop', async () => {
+		test('returns tool result instructing the planner to conclude', async () => {
 			const result = await tool.invoke(fakeOptions, fakeToken);
 			assert.ok(result);
 			const content = (result as any).content ?? (result as any)._content;
 			if (content) {
 				const text = content[0]?.value ?? content[0]?.text ?? '';
-				assert.include(text, 'Do NOT call any more tools');
+				assert.include(text, 'conclude your planning response');
+				assert.notInclude(text.toLowerCase(), 'do not call any more tools');
 			}
 		});
 	});

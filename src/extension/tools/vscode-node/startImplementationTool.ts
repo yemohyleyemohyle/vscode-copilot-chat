@@ -131,9 +131,8 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 		// with the correct model.
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(
-				'Handoff to Agent mode initiated. The planning session is now complete. ' +
-				'Do NOT call any more tools or take any further action. ' +
-				'A new request will be submitted automatically in Agent mode to begin implementation.'
+				'Planning phase completed successfully. The session mode has been switched to Agent for implementation. ' +
+				'This tool call marks the end of the planning turn — conclude your planning response now.'
 			)
 		]);
 	}
