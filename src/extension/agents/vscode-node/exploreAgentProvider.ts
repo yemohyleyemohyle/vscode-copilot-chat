@@ -76,7 +76,7 @@ export class ExploreAgentProvider extends Disposable implements vscode.ChatCusto
 		_context: unknown,
 		_token: vscode.CancellationToken
 	): Promise<vscode.ChatResource[]> {
-		const config = this._buildCustomizedConfig();
+		const config = await this._buildCustomizedConfig();
 		const content = buildAgentMarkdown(config);
 		const fileUri = await this._writeCacheFile(content);
 		return [{ uri: fileUri }];
@@ -132,12 +132,20 @@ Report findings directly as a message. Include:
 Remember: Your goal is searching efficiently through MAXIMUM PARALLELISM to report concise and clear answers.`;
 	}
 
-	private _buildCustomizedConfig(): AgentConfig {
+	private async _buildCustomizedConfig(): Promise<AgentConfig> {
 		// Model selection priority: core config > extension config > fallback list
 		// Empty string means "not set", so we explicitly check for truthy values
 		const coreDefaultModel = this._configurationService.getNonExtensionConfig<string>('chat.exploreAgent.defaultModel');
 		const extModel = this._configurationService.getConfig(ConfigKey.ExploreAgentModel);
-		const model: string | readonly string[] = coreDefaultModel || extModel || EXPLORE_AGENT_FALLBACK_MODELS;
+		let model: string | readonly string[] = coreDefaultModel || extModel || EXPLORE_AGENT_FALLBACK_MODELS;
+
+		// VS Code core resolves .agent.md model fields by matching against display names
+		// in the format "Model Name (vendor)" (e.g., "Claude Haiku 4.5 (copilot)").
+		// Config values are typically model IDs (e.g., "claude-sonnet-4").
+		// Convert model IDs to display names so core can resolve them correctly.
+		if (typeof model === 'string') {
+			model = await this._resolveModelDisplayName(model);
+		}
 
 		this._logService.info(`[ExploreAgentProvider] Model resolution: coreDefaultModel=${JSON.stringify(coreDefaultModel)}, extModel=${JSON.stringify(extModel)}, resolved=${JSON.stringify(model)}`);
 
@@ -146,5 +154,38 @@ Remember: Your goal is searching efficiently through MAXIMUM PARALLELISM to repo
 			body: ExploreAgentProvider.buildAgentBody(),
 			model,
 		};
+	}
+
+	/**
+	 * Resolves a model ID to a display name in the format VS Code core expects
+	 * for .agent.md model fields: "Model Name (vendor)".
+	 *
+	 * Tries matching by id first, then by family. Returns the original value
+	 * if no matching model is found (e.g., if the value is already a display name).
+	 */
+	private async _resolveModelDisplayName(modelId: string): Promise<string> {
+		// If the value already looks like a display name (contains parentheses), return as-is
+		if (modelId.includes('(')) {
+			return modelId;
+		}
+
+		try {
+			// Try matching by model ID first
+			let models = await vscode.lm.selectChatModels({ id: modelId, vendor: 'copilot' });
+			if (models.length === 0) {
+				// Fall back to matching by family
+				models = await vscode.lm.selectChatModels({ family: modelId, vendor: 'copilot' });
+			}
+			if (models.length > 0) {
+				const displayName = `${models[0].name} (${models[0].vendor})`;
+				this._logService.info(`[ExploreAgentProvider] Resolved model ID '${modelId}' to display name '${displayName}'`);
+				return displayName;
+			}
+		} catch (e) {
+			this._logService.warn(`[ExploreAgentProvider] Failed to resolve model display name for '${modelId}': ${e}`);
+		}
+
+		// Return the original value if resolution fails
+		return modelId;
 	}
 }
