@@ -246,7 +246,11 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (this._followUpQuery) {
 			// Follow-up query injected by in-loop detection (e.g. startImplementation).
 			// Used as-is, without formatHookContext wrapping.
+			// Set hasStopHookQuery so the prompt builder renders this as an actual
+			// UserMessage — otherwise isContinuation=true causes the user message
+			// to be skipped, and the model never sees the follow-up instruction.
 			query = this._followUpQuery;
+			hasStopHookQuery = true;
 			this._logService.info(`[ToolCallingLoop] Using follow-up query: ${query}`);
 			this._followUpQuery = undefined;
 		} else if (this.stopHookReason) {
