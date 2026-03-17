@@ -139,6 +139,8 @@ Remember: Your goal is searching efficiently through MAXIMUM PARALLELISM to repo
 		const extModel = this._configurationService.getConfig(ConfigKey.ExploreAgentModel);
 		const model: string | readonly string[] = coreDefaultModel || extModel || EXPLORE_AGENT_FALLBACK_MODELS;
 
+		this._logService.info(`[ExploreAgentProvider] Model resolution: coreDefaultModel=${JSON.stringify(coreDefaultModel)}, extModel=${JSON.stringify(extModel)}, resolved=${JSON.stringify(model)}`);
+
 		return {
 			...BASE_EXPLORE_AGENT_CONFIG,
 			body: ExploreAgentProvider.buildAgentBody(),

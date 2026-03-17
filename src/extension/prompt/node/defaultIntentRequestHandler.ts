@@ -120,9 +120,15 @@ export class DefaultIntentRequestHandler {
 			}
 
 			this._logService.trace('Processing intent');
+			if (this.request.subAgentInvocationId) {
+				this._logService.info(`[SubagentEndpoint] subAgentName=${this.request.subAgentName}, model.id=${this.request.model?.id}, model.vendor=${this.request.model?.vendor}, model.family=${this.request.model?.family}, model.name=${this.request.model?.name}`);
+			}
 			const intentInvocation = await this.intent.invoke({ location: this.location, documentContext: this.documentContext, request: this.request });
 			if (this.token.isCancellationRequested) {
 				return CanceledResult;
+			}
+			if (this.request.subAgentInvocationId) {
+				this._logService.info(`[SubagentEndpoint] Resolved endpoint: family=${intentInvocation.endpoint.family}, model=${intentInvocation.endpoint.model}, name=${intentInvocation.endpoint.name}, maxPromptTokens=${intentInvocation.endpoint.modelMaxPromptTokens}`);
 			}
 			this._logService.trace('Processed intent');
 
@@ -676,6 +682,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`;
 		// Use the override endpoint if available (e.g. after startImplementation model switch)
 		const endpoint = this._activeEndpointOverride ?? this.options.invocation.endpoint;
+		if (this.options.request.subAgentInvocationId) {
+			this._logService.info(`[SubagentEndpoint] fetch(): debugName=${debugName}, endpoint.family=${endpoint.family}, endpoint.model=${endpoint.model}, endpoint.name=${endpoint.name}`);
+		}
 		return endpoint.makeChatRequest2({
 			...opts,
 			debugName,

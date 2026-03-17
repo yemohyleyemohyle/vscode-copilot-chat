@@ -66,6 +66,7 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 		this._logService.trace(`Resolving chat model`);
 
 		if (typeof requestOrFamilyOrModel === 'string') {
+			this._logService.info(`[EndpointProvider] Resolving from family string: ${requestOrFamilyOrModel}`);
 			const modelMetadata = await this._modelFetcher.getChatModelFromFamily(requestOrFamilyOrModel);
 			return this.getOrCreateChatEndpointInstance(modelMetadata!);
 		}
@@ -73,8 +74,11 @@ export class ProductionEndpointProvider extends Disposable implements IEndpointP
 		const model = 'model' in requestOrFamilyOrModel ? requestOrFamilyOrModel.model : requestOrFamilyOrModel;
 
 		if (!model) {
+			this._logService.info(`[EndpointProvider] No model on request, falling back to copilot-base`);
 			return this.getChatEndpoint('copilot-base');
 		}
+
+		this._logService.info(`[EndpointProvider] Resolving model: id=${model.id}, vendor=${model.vendor}, family=${model.family}, name=${model.name}`);
 
 		if (model.vendor !== 'copilot') {
 			return this._instantiationService.createInstance(ExtensionContributedChatEndpoint, model);
