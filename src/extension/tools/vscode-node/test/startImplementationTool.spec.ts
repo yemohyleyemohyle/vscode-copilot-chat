@@ -293,16 +293,35 @@ suite('StartImplementationTool', () => {
 			// Advance well past timeout (30s)
 			await vi.advanceTimersByTimeAsync(31_000);
 
-			// Should have stopped trying (interval cleared)
+			// Should have stopped trying (interval cleared after max attempts or timeout)
 			const callsBefore = submitSpy.mock.calls.length;
 			await vi.advanceTimersByTimeAsync(5_000);
 			const callsAfter = submitSpy.mock.calls.length;
 			assert.equal(callsBefore, callsAfter);
 		});
+
+		test('stops after reaching max attempts even when not throwing', async () => {
+			vi.useFakeTimers();
+			const submitSpy = vi.spyOn(tool as any, 'submitImplementationRequest').mockResolvedValue(undefined);
+
+			tool.scheduleDeferredResubmission();
+
+			// Advance through all 3 attempts (mock resolves immediately)
+			await vi.advanceTimersByTimeAsync(2000); // attempt 1
+			await vi.advanceTimersByTimeAsync(2000); // attempt 2
+			await vi.advanceTimersByTimeAsync(2000); // attempt 3
+
+			const callsBefore = submitSpy.mock.calls.length;
+			assert.equal(callsBefore, 3);
+
+			// No more attempts after max
+			await vi.advanceTimersByTimeAsync(10_000);
+			assert.equal(submitSpy.mock.calls.length, 3);
+		});
 	});
 
 	suite('submitImplementationRequest', () => {
-		test('focuses chat panel, types prompt, and submits', async () => {
+		test('focuses chat panel, selects all, types prompt, and submits', async () => {
 			vi.useFakeTimers();
 			const commandCalls: Array<{ command: string; args: any }> = [];
 			executeCommandSpy.mockImplementation(async (command: string, args: any) => {
@@ -311,12 +330,16 @@ suite('StartImplementationTool', () => {
 
 			const submitPromise = (tool as any).submitImplementationRequest();
 			// Advance past settle delay
-			await vi.advanceTimersByTimeAsync(2000);
+			await vi.advanceTimersByTimeAsync(5000);
 			await submitPromise;
 
 			// Should focus the chat panel first
 			const focusCall = commandCalls.find(c => c.command === 'workbench.panel.chat.view.copilot.focus');
 			assert.ok(focusCall, 'should call workbench.panel.chat.view.copilot.focus');
+
+			// Should select all text (to clear previous attempt's text)
+			const selectAllCall = commandCalls.find(c => c.command === 'editor.action.selectAll');
+			assert.ok(selectAllCall, 'should call editor.action.selectAll');
 
 			// Should type the prompt
 			const typeCall = commandCalls.find(c => c.command === 'type');
@@ -332,7 +355,7 @@ suite('StartImplementationTool', () => {
 			assert.equal(openCall, undefined, 'should not use chat.open');
 		});
 
-		test('calls focus, then changeModel, then type, then submit (correct order)', async () => {
+		test('calls focus, then changeModel, then selectAll, then type, then submit (correct order)', async () => {
 			vi.useFakeTimers();
 			const callOrder: string[] = [];
 			executeCommandSpy.mockImplementation(async (command: string) => {
@@ -341,12 +364,13 @@ suite('StartImplementationTool', () => {
 
 			const model = { vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' };
 			const submitPromise = (tool as any).submitImplementationRequest(model);
-			await vi.advanceTimersByTimeAsync(2000);
+			await vi.advanceTimersByTimeAsync(5000);
 			await submitPromise;
 
 			assert.deepStrictEqual(callOrder, [
 				'workbench.panel.chat.view.copilot.focus',
 				'workbench.action.chat.changeModel',
+				'editor.action.selectAll',
 				'type',
 				'workbench.action.chat.submit',
 			]);
@@ -360,11 +384,12 @@ suite('StartImplementationTool', () => {
 			});
 
 			const submitPromise = (tool as any).submitImplementationRequest();
-			await vi.advanceTimersByTimeAsync(2000);
+			await vi.advanceTimersByTimeAsync(5000);
 			await submitPromise;
 
 			assert.deepStrictEqual(callOrder, [
 				'workbench.panel.chat.view.copilot.focus',
+				'editor.action.selectAll',
 				'type',
 				'workbench.action.chat.submit',
 			]);
