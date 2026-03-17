@@ -17,7 +17,7 @@ import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoin
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
-import { IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
+import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { CopilotChatAttr, emitAgentTurnEvent, emitSessionStartEvent, GenAiAttr, GenAiMetrics, GenAiOperationName, GenAiProviderName, StdAttr, truncateForOTel } from '../../../platform/otel/common/index';
 import { IOTelService, SpanKind, SpanStatusCode } from '../../../platform/otel/common/otelService';
@@ -186,6 +186,12 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * Uses the same pattern as {@link SearchSubagentToolCallingLoop.getEndpoint}.
 	 */
 	private _endpointFamilyOverride: string | undefined;
+
+	/**
+	 * The resolved endpoint when `_endpointFamilyOverride` is set.
+	 * Subclasses can use this in `fetch()` to send requests to the overridden model.
+	 */
+	protected _activeEndpointOverride: IChatEndpoint | undefined;
 
 	public appendAdditionalHookContext(context: string): void {
 		if (!context) {
@@ -1096,9 +1102,19 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (conversationSummary) {
 			this.turn.setMetadata(conversationSummary);
 		}
-		const endpoint = this._endpointFamilyOverride
-			? await this._endpointProvider.getChatEndpoint(this._endpointFamilyOverride as ChatEndpointFamily).catch(() => this._endpointProvider.getChatEndpoint(this.options.request))
-			: await this._endpointProvider.getChatEndpoint(this.options.request);
+		let endpoint: IChatEndpoint;
+		if (this._endpointFamilyOverride) {
+			try {
+				endpoint = await this._endpointProvider.getChatEndpoint(this._endpointFamilyOverride as ChatEndpointFamily);
+				this._activeEndpointOverride = endpoint;
+				this._logService.info(`[ToolCallingLoop] Resolved endpoint override for model: ${endpoint.family}`);
+			} catch (e) {
+				this._logService.warn(`[ToolCallingLoop] Failed to resolve endpoint for '${this._endpointFamilyOverride}', falling back to request model: ${e}`);
+				endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+			}
+		} else {
+			endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+		}
 		const tokenizer = endpoint.acquireTokenizer();
 		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);
 		const toolTokenCount = availableTools.length > 0 ? await tokenizer.countToolTokens(availableTools) : 0;

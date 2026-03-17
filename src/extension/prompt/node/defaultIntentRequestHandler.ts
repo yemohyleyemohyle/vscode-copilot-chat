@@ -674,7 +674,9 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		const debugName = this.options.request.subAgentInvocationId ?
 			`tool/runSubagent${this.options.request.subAgentName ? `-${this.options.request.subAgentName}` : ''}` :
 			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`;
-		return this.options.invocation.endpoint.makeChatRequest2({
+		// Use the override endpoint if available (e.g. after startImplementation model switch)
+		const endpoint = this._activeEndpointOverride ?? this.options.invocation.endpoint;
+		return endpoint.makeChatRequest2({
 			...opts,
 			debugName,
 			conversationId: this.options.conversation.sessionId,
@@ -687,7 +689,7 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 			requestOptions: {
 				...opts.requestOptions,
 				tools: normalizeToolSchema(
-					this.options.invocation.endpoint.family,
+					endpoint.family,
 					opts.requestOptions.tools,
 					(tool, rule) => {
 						this._logService.warn(`Tool ${tool} failed validation: ${rule}`);
