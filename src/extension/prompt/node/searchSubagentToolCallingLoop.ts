@@ -86,30 +86,41 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily | undefined;
 		const useAgenticProxy = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentUseAgenticProxy, this._experimentationService);
 
+		// Log all model config sources for diagnostic purposes
+		const coreDefaultModel = this._configurationService.getNonExtensionConfig<string>('chat.exploreAgent.defaultModel');
+		const exploreAgentModel = this._configurationService.getConfig(ConfigKey.ExploreAgentModel);
+		this._logService.info(`[SearchSubagent] Model resolution: SearchSubagentModel=${JSON.stringify(modelName)}, coreDefaultModel=${JSON.stringify(coreDefaultModel)}, ExploreAgentModel=${JSON.stringify(exploreAgentModel)}, useAgenticProxy=${useAgenticProxy}`);
+
 		if (useAgenticProxy) {
 			// Use agentic proxy with SearchSubagentModel or default to 'agentic-search-v3'
 			const agenticProxyModel = modelName || SearchSubagentToolCallingLoop.DEFAULT_AGENTIC_PROXY_MODEL;
+			this._logService.info(`[SearchSubagent] Using agentic proxy model: ${agenticProxyModel}`);
 			return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint, agenticProxyModel);
 		}
 
 		// Resolve model name from available config sources
 		const resolvedModel = modelName
-			|| this._configurationService.getNonExtensionConfig<string>('chat.exploreAgent.defaultModel')
-			|| this._configurationService.getConfig(ConfigKey.ExploreAgentModel)
+			|| coreDefaultModel
+			|| exploreAgentModel
 			|| undefined;
 
 		if (resolvedModel) {
+			this._logService.info(`[SearchSubagent] Resolved model override: ${resolvedModel}`);
 			try {
 				// Try to get the specified model
-				return await this.endpointProvider.getChatEndpoint(resolvedModel as ChatEndpointFamily);
+				const endpoint = await this.endpointProvider.getChatEndpoint(resolvedModel as ChatEndpointFamily);
+				this._logService.info(`[SearchSubagent] Endpoint resolved successfully: family=${endpoint.family}`);
+				return endpoint;
 			} catch (error) {
 				// Model not available or doesn't support tool calls, fallback to main agent
-				this._logService.warn(`Failed to get model ${resolvedModel}, falling back to main agent endpoint: ${error}`);
+				this._logService.warn(`[SearchSubagent] Failed to get model ${resolvedModel}, falling back to main agent endpoint: ${error}`);
 				return await this.endpointProvider.getChatEndpoint(this.options.request);
 			}
 		} else {
 			// No model name specified, use main agent endpoint
-			return await this.endpointProvider.getChatEndpoint(this.options.request);
+			const endpoint = await this.endpointProvider.getChatEndpoint(this.options.request);
+			this._logService.info(`[SearchSubagent] No model override, using main agent endpoint: family=${endpoint.family}`);
+			return endpoint;
 		}
 	}
 
@@ -147,6 +158,7 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 
 	protected async fetch({ messages, finishedCb, requestOptions }: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const endpoint = await this.getEndpoint();
+		this._logService.info(`[SearchSubagent] fetch() using endpoint: family=${endpoint.family}`);
 		return endpoint.makeChatRequest2({
 			debugName: SearchSubagentToolCallingLoop.ID,
 			messages,
