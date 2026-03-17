@@ -11,9 +11,9 @@ import { IChatHookService, SessionStartHookInput, SessionStartHookOutput, StopHo
 import { FetchStreamSource, IResponsePart } from '../../../platform/chat/common/chatMLFetcher';
 import { CanceledResult, ChatFetchResponseType, ChatResponse } from '../../../platform/chat/common/commonTypes';
 import { IHistoricalTurn, ISessionTranscriptService, ToolRequest } from '../../../platform/chat/common/sessionTranscriptService';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily, isGeminiFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
-import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
@@ -179,6 +179,13 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * Guard to ensure a startImplementation follow-up fires at most once.
 	 */
 	private _startImplFollowUpDone = false;
+
+	/**
+	 * When set, overrides the endpoint/model used by `runOne`. Read from
+	 * `ConfigKey.ImplementAgentModel` after a `startImplementation` tool call.
+	 * Uses the same pattern as {@link SearchSubagentToolCallingLoop.getEndpoint}.
+	 */
+	private _endpointFamilyOverride: string | undefined;
 
 	public appendAdditionalHookContext(context: string): void {
 		if (!context) {
@@ -914,6 +921,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 						if (hasStartImpl) {
 							this._startImplFollowUpDone = true;
 							this._followUpQuery = 'Start implementation';
+
+							// Override the endpoint model for the follow-up implementation request
+							const implementModel = this._configurationService.getConfig(ConfigKey.ImplementAgentModel);
+							if (implementModel) {
+								this._endpointFamilyOverride = implementModel;
+								this._logService.info(`[ToolCallingLoop] Overriding endpoint to model: ${implementModel}`);
+							}
+
 							this._logService.info('[ToolCallingLoop] Detected startImplementation tool call, injecting follow-up query');
 							continue;
 						}
@@ -1081,7 +1096,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		if (conversationSummary) {
 			this.turn.setMetadata(conversationSummary);
 		}
-		const endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+		const endpoint = this._endpointFamilyOverride
+			? await this._endpointProvider.getChatEndpoint(this._endpointFamilyOverride as ChatEndpointFamily).catch(() => this._endpointProvider.getChatEndpoint(this.options.request))
+			: await this._endpointProvider.getChatEndpoint(this.options.request);
 		const tokenizer = endpoint.acquireTokenizer();
 		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);
 		const toolTokenCount = availableTools.length > 0 ? await tokenizer.countToolTokens(availableTools) : 0;
