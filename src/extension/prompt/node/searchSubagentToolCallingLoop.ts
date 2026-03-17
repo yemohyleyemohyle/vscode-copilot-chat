@@ -74,7 +74,13 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 	private static readonly DEFAULT_AGENTIC_PROXY_MODEL = 'agentic-search-v3';
 
 	/**
-	 * Get the endpoint to use for the search subagent
+	 * Get the endpoint to use for the search subagent.
+	 *
+	 * Model resolution priority:
+	 * 1. `ConfigKey.Advanced.SearchSubagentModel` — experiment-based internal setting
+	 * 2. VS Code core `chat.exploreAgent.defaultModel` — core setting
+	 * 3. `ConfigKey.ExploreAgentModel` — user-facing extension setting (`github.copilot.chat.exploreAgent.model`)
+	 * 4. Main agent endpoint (fallback — inherits the parent request's model)
 	 */
 	private async getEndpoint() {
 		const modelName = this._configurationService.getExperimentBasedConfig(ConfigKey.Advanced.SearchSubagentModel, this._experimentationService) as ChatEndpointFamily | undefined;
@@ -86,13 +92,19 @@ export class SearchSubagentToolCallingLoop extends ToolCallingLoop<ISearchSubage
 			return this.instantiationService.createInstance(ProxyAgenticSearchEndpoint, agenticProxyModel);
 		}
 
-		if (modelName) {
+		// Resolve model name from available config sources
+		const resolvedModel = modelName
+			|| this._configurationService.getNonExtensionConfig<string>('chat.exploreAgent.defaultModel')
+			|| this._configurationService.getConfig(ConfigKey.ExploreAgentModel)
+			|| undefined;
+
+		if (resolvedModel) {
 			try {
 				// Try to get the specified model
-				return await this.endpointProvider.getChatEndpoint(modelName);
+				return await this.endpointProvider.getChatEndpoint(resolvedModel as ChatEndpointFamily);
 			} catch (error) {
 				// Model not available or doesn't support tool calls, fallback to main agent
-				this._logService.warn(`Failed to get model ${modelName}, falling back to main agent endpoint: ${error}`);
+				this._logService.warn(`Failed to get model ${resolvedModel}, falling back to main agent endpoint: ${error}`);
 				return await this.endpointProvider.getChatEndpoint(this.options.request);
 			}
 		} else {
