@@ -168,6 +168,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	private additionalHookContext: string | undefined;
 	private stopHookUserInitiated = false;
 
+	/**
+	 * A follow-up query injected by in-loop detection (e.g. after
+	 * `vscode_startImplementation`). Unlike {@link stopHookReason}, this is
+	 * used as-is without wrapping in `formatHookContext`.
+	 */
+	private _followUpQuery: string | undefined;
+
+	/**
+	 * Guard to ensure a startImplementation follow-up fires at most once.
+	 */
+	private _startImplFollowUpDone = false;
+
 	public appendAdditionalHookContext(context: string): void {
 		if (!context) {
 			return;
@@ -215,10 +227,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const { request } = this.options;
 		const chatVariables = new ChatVariablesCollection(request.references);
 
-		const isContinuation = this.turn.isContinuation || !!this.stopHookReason;
+		const isContinuation = this.turn.isContinuation || !!this.stopHookReason || !!this._followUpQuery;
 		let query: string;
 		let hasStopHookQuery = false;
-		if (this.stopHookReason) {
+		if (this._followUpQuery) {
+			// Follow-up query injected by in-loop detection (e.g. startImplementation).
+			// Used as-is, without formatHookContext wrapping.
+			query = this._followUpQuery;
+			this._logService.info(`[ToolCallingLoop] Using follow-up query: ${query}`);
+			this._followUpQuery = undefined;
+		} else if (this.stopHookReason) {
 			// Include the stop hook reason as a user message so the model knows what to do.
 			// Wrap with context so the model understands it needs to take action.
 			query = formatHookContext([this.stopHookReason]);
@@ -881,6 +899,22 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 							this.stopHookReason = autopilotContinue;
 							result.round.hookContext = formatHookContext([autopilotContinue]);
 							this.autopilotStopHookActive = true;
+							continue;
+						}
+					}
+
+					// Check if startImplementation was called in a previous round.
+					// If so, inject a follow-up "Start implementation" query to keep
+					// the implementation within the same request pipeline. This avoids
+					// timer-based deferred submission which races with the test harness.
+					if (!this._startImplFollowUpDone && result.response.type === ChatFetchResponseType.Success) {
+						const hasStartImpl = this.toolCallRounds.some(r =>
+							r.toolCalls.some(tc => tc.name === ToolName.StartImplementation)
+						);
+						if (hasStartImpl) {
+							this._startImplFollowUpDone = true;
+							this._followUpQuery = 'Start implementation';
+							this._logService.info('[ToolCallingLoop] Detected startImplementation tool call, injecting follow-up query');
 							continue;
 						}
 					}

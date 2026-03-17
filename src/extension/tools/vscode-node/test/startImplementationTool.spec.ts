@@ -28,7 +28,6 @@ suite('StartImplementationTool', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
-		vi.useRealTimers();
 	});
 
 	test('has correct static toolName matching ToolName enum', () => {
@@ -110,12 +109,7 @@ suite('StartImplementationTool', () => {
 		} as any;
 		const fakeToken = {} as any;
 
-		beforeEach(() => {
-			// Stub scheduleDeferredResubmission to prevent real intervals in tests
-			vi.spyOn(tool, 'scheduleDeferredResubmission').mockImplementation(() => { });
-		});
-
-		test('calls toggleAgentMode without prompt/send when no implement model is configured', async () => {
+		test('calls toggleAgentMode without model when no implement model is configured', async () => {
 			await tool.invoke(fakeOptions, fakeToken);
 
 			const toggleCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.toggleAgentMode');
@@ -126,7 +120,7 @@ suite('StartImplementationTool', () => {
 			});
 		});
 
-		test('passes model in toggleAgentMode and calls changeModel after when implement model is configured', async () => {
+		test('passes model in toggleAgentMode and calls changeModel when implement model is configured', async () => {
 			getConfigurationSpy.mockReturnValue({
 				get: () => 'claude-opus-4.6',
 			} as any);
@@ -140,7 +134,6 @@ suite('StartImplementationTool', () => {
 
 			await tool.invoke(fakeOptions, fakeToken);
 
-			// Should have called toggleAgentMode with model but NOT prompt/send
 			const toggleCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.toggleAgentMode');
 			assert.equal(toggleCalls.length, 1);
 			assert.deepStrictEqual(toggleCalls[0][1], {
@@ -149,7 +142,6 @@ suite('StartImplementationTool', () => {
 				model: { vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' },
 			});
 
-			// Should have called changeModel after toggleAgentMode
 			const changeModelCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.changeModel');
 			assert.equal(changeModelCalls.length, 1);
 			assert.deepStrictEqual(changeModelCalls[0][1], {
@@ -196,7 +188,26 @@ suite('StartImplementationTool', () => {
 			]);
 		});
 
-		test('schedules deferred resubmission with resolved model', async () => {
+		test('does not have deferred resubmission methods', () => {
+			// The tool should NOT have any deferred resubmission logic.
+			// The ToolCallingLoop handles the follow-up in-band.
+			assert.equal(typeof (tool as any).scheduleDeferredResubmission, 'undefined');
+			assert.equal(typeof (tool as any).submitImplementationRequest, 'undefined');
+		});
+
+		test('returns tool result that tells planner to conclude', async () => {
+			const result = await tool.invoke(fakeOptions, fakeToken);
+			assert.ok(result);
+			const content = (result as any).content ?? (result as any)._content;
+			if (content) {
+				const text = content[0]?.value ?? content[0]?.text ?? '';
+				assert.include(text, 'Summarize the plan briefly and conclude');
+				assert.include(text, 'follow-up implementation request');
+				assert.notInclude(text.toLowerCase(), 'do not call any more tools');
+			}
+		});
+
+		test('only calls toggleAgentMode and changeModel — no type/submit/focus commands', async () => {
 			getConfigurationSpy.mockReturnValue({
 				get: () => 'claude-opus-4.6',
 			} as any);
@@ -206,194 +217,13 @@ suite('StartImplementationTool', () => {
 			] as any);
 
 			await tool.invoke(fakeOptions, fakeToken);
-			const spy = tool.scheduleDeferredResubmission as any;
-			assert.equal(spy.mock.calls.length, 1);
-			assert.deepStrictEqual(spy.mock.calls[0][0], {
-				vendor: 'copilot',
-				id: 'claude-opus-4.6',
-				family: 'claude-opus',
-			});
-		});
 
-		test('schedules deferred resubmission with undefined when no model', async () => {
-			await tool.invoke(fakeOptions, fakeToken);
-			const spy = tool.scheduleDeferredResubmission as any;
-			assert.equal(spy.mock.calls.length, 1);
-			assert.equal(spy.mock.calls[0][0], undefined);
-		});
-
-		test('returns tool result instructing the planner to conclude', async () => {
-			const result = await tool.invoke(fakeOptions, fakeToken);
-			assert.ok(result);
-			const content = (result as any).content ?? (result as any)._content;
-			if (content) {
-				const text = content[0]?.value ?? content[0]?.text ?? '';
-				assert.include(text, 'conclude your planning response');
-				assert.notInclude(text.toLowerCase(), 'do not call any more tools');
-			}
+			const allCommands = executeCommandSpy.mock.calls.map((c: any) => c[0]);
+			assert.notInclude(allCommands, 'type');
+			assert.notInclude(allCommands, 'workbench.action.chat.submit');
+			assert.notInclude(allCommands, 'workbench.panel.chat.view.copilot.focus');
+			assert.notInclude(allCommands, 'workbench.action.chat.open');
+			assert.notInclude(allCommands, 'editor.action.selectAll');
 		});
 	});
-
-	suite('scheduleDeferredResubmission', () => {
-		test('submits implementation request after poll interval', async () => {
-			vi.useFakeTimers();
-			const submitSpy = vi.spyOn(tool as any, 'submitImplementationRequest').mockResolvedValue(undefined);
-
-			tool.scheduleDeferredResubmission();
-
-			// Should not have submitted yet
-			assert.equal(submitSpy.mock.calls.length, 0);
-
-			// Advance past the poll interval
-			await vi.advanceTimersByTimeAsync(2000);
-
-			// Should have attempted submission
-			assert.equal(submitSpy.mock.calls.length, 1);
-		});
-
-		test('passes resolvedModel to submitImplementationRequest', async () => {
-			vi.useFakeTimers();
-			const submitSpy = vi.spyOn(tool as any, 'submitImplementationRequest').mockResolvedValue(undefined);
-			const model = { vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' };
-
-			tool.scheduleDeferredResubmission(model);
-
-			await vi.advanceTimersByTimeAsync(2000);
-			assert.equal(submitSpy.mock.calls.length, 1);
-			assert.deepStrictEqual(submitSpy.mock.calls[0][0], model);
-		});
-
-		test('retries on failure', async () => {
-			vi.useFakeTimers();
-			let callCount = 0;
-			vi.spyOn(tool as any, 'submitImplementationRequest').mockImplementation(async () => {
-				callCount++;
-				if (callCount === 1) {
-					throw new Error('Not ready yet');
-				}
-			});
-
-			tool.scheduleDeferredResubmission();
-
-			// First attempt fails
-			await vi.advanceTimersByTimeAsync(2000);
-			assert.equal(callCount, 1);
-
-			// Second attempt succeeds
-			await vi.advanceTimersByTimeAsync(2000);
-			assert.equal(callCount, 2);
-		});
-
-		test('times out after max duration', async () => {
-			vi.useFakeTimers();
-			const submitSpy = vi.spyOn(tool as any, 'submitImplementationRequest').mockRejectedValue(new Error('Always fails'));
-
-			tool.scheduleDeferredResubmission();
-
-			// Advance well past timeout (30s)
-			await vi.advanceTimersByTimeAsync(31_000);
-
-			// Should have stopped trying (interval cleared after max attempts or timeout)
-			const callsBefore = submitSpy.mock.calls.length;
-			await vi.advanceTimersByTimeAsync(5_000);
-			const callsAfter = submitSpy.mock.calls.length;
-			assert.equal(callsBefore, callsAfter);
-		});
-
-		test('stops after reaching max attempts even when not throwing', async () => {
-			vi.useFakeTimers();
-			const submitSpy = vi.spyOn(tool as any, 'submitImplementationRequest').mockResolvedValue(undefined);
-
-			tool.scheduleDeferredResubmission();
-
-			// Advance through all 3 attempts (mock resolves immediately)
-			await vi.advanceTimersByTimeAsync(2000); // attempt 1
-			await vi.advanceTimersByTimeAsync(2000); // attempt 2
-			await vi.advanceTimersByTimeAsync(2000); // attempt 3
-
-			const callsBefore = submitSpy.mock.calls.length;
-			assert.equal(callsBefore, 3);
-
-			// No more attempts after max
-			await vi.advanceTimersByTimeAsync(10_000);
-			assert.equal(submitSpy.mock.calls.length, 3);
-		});
-	});
-
-	suite('submitImplementationRequest', () => {
-		test('focuses chat panel, selects all, types prompt, and submits', async () => {
-			vi.useFakeTimers();
-			const commandCalls: Array<{ command: string; args: any }> = [];
-			executeCommandSpy.mockImplementation(async (command: string, args: any) => {
-				commandCalls.push({ command, args });
-			});
-
-			const submitPromise = (tool as any).submitImplementationRequest();
-			// Advance past settle delay
-			await vi.advanceTimersByTimeAsync(5000);
-			await submitPromise;
-
-			// Should focus the chat panel first
-			const focusCall = commandCalls.find(c => c.command === 'workbench.panel.chat.view.copilot.focus');
-			assert.ok(focusCall, 'should call workbench.panel.chat.view.copilot.focus');
-
-			// Should select all text (to clear previous attempt's text)
-			const selectAllCall = commandCalls.find(c => c.command === 'editor.action.selectAll');
-			assert.ok(selectAllCall, 'should call editor.action.selectAll');
-
-			// Should type the prompt
-			const typeCall = commandCalls.find(c => c.command === 'type');
-			assert.ok(typeCall, 'should call type command');
-			assert.deepStrictEqual(typeCall!.args, { text: 'Start implementation' });
-
-			// Should submit
-			const submitCall = commandCalls.find(c => c.command === 'workbench.action.chat.submit');
-			assert.ok(submitCall, 'should call workbench.action.chat.submit');
-
-			// Should NOT use chat.open (which creates a new session)
-			const openCall = commandCalls.find(c => c.command === 'workbench.action.chat.open');
-			assert.equal(openCall, undefined, 'should not use chat.open');
-		});
-
-		test('calls focus, then changeModel, then selectAll, then type, then submit (correct order)', async () => {
-			vi.useFakeTimers();
-			const callOrder: string[] = [];
-			executeCommandSpy.mockImplementation(async (command: string) => {
-				callOrder.push(command);
-			});
-
-			const model = { vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' };
-			const submitPromise = (tool as any).submitImplementationRequest(model);
-			await vi.advanceTimersByTimeAsync(5000);
-			await submitPromise;
-
-			assert.deepStrictEqual(callOrder, [
-				'workbench.panel.chat.view.copilot.focus',
-				'workbench.action.chat.changeModel',
-				'editor.action.selectAll',
-				'type',
-				'workbench.action.chat.submit',
-			]);
-		});
-
-		test('skips changeModel when no model is provided', async () => {
-			vi.useFakeTimers();
-			const callOrder: string[] = [];
-			executeCommandSpy.mockImplementation(async (command: string) => {
-				callOrder.push(command);
-			});
-
-			const submitPromise = (tool as any).submitImplementationRequest();
-			await vi.advanceTimersByTimeAsync(5000);
-			await submitPromise;
-
-			assert.deepStrictEqual(callOrder, [
-				'workbench.panel.chat.view.copilot.focus',
-				'editor.action.selectAll',
-				'type',
-				'workbench.action.chat.submit',
-			]);
-		});
-	});
-
 });
