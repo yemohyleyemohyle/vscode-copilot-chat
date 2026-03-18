@@ -243,6 +243,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const isContinuation = this.turn.isContinuation || !!this.stopHookReason || !!this._followUpQuery;
 		let query: string;
 		let hasStopHookQuery = false;
+		// When a follow-up query changes modes (plan→agent), the plan mode's
+		// modeInstructions on the ChatRequest are stale and must be cleared.
+		let clearModeInstructions = false;
 		if (this._followUpQuery) {
 			// Follow-up query injected by in-loop detection (e.g. startImplementation).
 			// Used as-is, without formatHookContext wrapping.
@@ -251,6 +254,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			// to be skipped, and the model never sees the follow-up instruction.
 			query = this._followUpQuery;
 			hasStopHookQuery = true;
+			clearModeInstructions = true;
 			this._logService.info(`[ToolCallingLoop] Using follow-up query: ${query}`);
 			this._followUpQuery = undefined;
 		} else if (this.stopHookReason) {
@@ -286,7 +290,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			},
 			isContinuation,
 			hasStopHookQuery,
-			modeInstructions: this.options.request.modeInstructions2,
+			modeInstructions: clearModeInstructions ? undefined : this.options.request.modeInstructions2,
 			additionalHookContext: this.additionalHookContext,
 		};
 	}
