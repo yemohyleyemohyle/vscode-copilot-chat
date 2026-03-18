@@ -6,7 +6,6 @@
 import type * as vscode from 'vscode';
 import { NotebookDocumentSnapshot } from '../../../platform/editing/common/notebookDocumentSnapshot';
 import { TextDocumentSnapshot } from '../../../platform/editing/common/textDocumentSnapshot';
-import { IChatEndpoint } from '../../../platform/networking/common/networking';
 import { OpenAIContextManagementResponse } from '../../../platform/networking/common/openai';
 import { ThinkingData } from '../../../platform/thinking/common/thinking';
 import { createServiceIdentifier } from '../../../util/common/services';
@@ -121,11 +120,6 @@ export interface IBuildPromptContext {
 	 * Additional context provided by a hook.
 	 */
 	readonly additionalHookContext?: string;
-	/**
-	 * When set, overrides the invocation's endpoint for prompt building.
-	 * Used during plan→implement transitions where the model changes mid-loop.
-	 */
-	readonly endpointOverride?: IChatEndpoint;
 }
 
 export const IBuildPromptContext = createServiceIdentifier<IBuildPromptContext>('IBuildPromptContext');

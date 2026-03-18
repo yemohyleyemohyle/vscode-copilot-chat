@@ -243,9 +243,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const isContinuation = this.turn.isContinuation || !!this.stopHookReason || !!this._followUpQuery;
 		let query: string;
 		let hasStopHookQuery = false;
-		// When a follow-up query changes modes (plan→agent), the plan mode's
-		// modeInstructions on the ChatRequest are stale and must be cleared.
-		let clearModeInstructions = false;
 		if (this._followUpQuery) {
 			// Follow-up query injected by in-loop detection (e.g. startImplementation).
 			// Used as-is, without formatHookContext wrapping.
@@ -254,7 +251,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			// to be skipped, and the model never sees the follow-up instruction.
 			query = this._followUpQuery;
 			hasStopHookQuery = true;
-			clearModeInstructions = true;
 			this._logService.info(`[ToolCallingLoop] Using follow-up query: ${query}`);
 			this._followUpQuery = undefined;
 		} else if (this.stopHookReason) {
@@ -290,7 +286,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			},
 			isContinuation,
 			hasStopHookQuery,
-			modeInstructions: clearModeInstructions ? undefined : this.options.request.modeInstructions2,
+			modeInstructions: this.options.request.modeInstructions2,
 			additionalHookContext: this.additionalHookContext,
 		};
 	}
@@ -1097,10 +1093,19 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	/** Runs a single iteration of the tool calling loop. */
 	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken): Promise<IToolCallSingleResult> {
 		let availableTools = await this.getAvailableTools(outputStream, token);
+		const context = this.createPromptContext(availableTools, outputStream);
+		const isContinuation = context.isContinuation || false;
+		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
+		this.throwIfCancelled(token);
+		this.turn.addReferences(buildPromptResult.references);
+		// Possible the tool call resulted in new tools getting added.
+		availableTools = await this.getAvailableTools(outputStream, token);
 
-		// Resolve endpoint override BEFORE building the prompt so that the
-		// prompt builder (AgentIntentInvocation) can use the correct model for
-		// system prompt customizations and token budgeting.
+		const isToolInputFailure = buildPromptResult.metadata.get(ToolFailureEncountered);
+		const conversationSummary = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
+		if (conversationSummary) {
+			this.turn.setMetadata(conversationSummary);
+		}
 		let endpoint: IChatEndpoint;
 		if (this._endpointFamilyOverride) {
 			try {
@@ -1113,27 +1118,6 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 		} else {
 			endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
-		}
-
-		const context = this.createPromptContext(availableTools, outputStream);
-		const isContinuation = context.isContinuation || false;
-
-		// Pass the override endpoint to the prompt builder so it uses the
-		// correct model family for system prompt selection & token budgeting.
-		if (this._activeEndpointOverride) {
-			(context as { endpointOverride?: IChatEndpoint }).endpointOverride = this._activeEndpointOverride;
-		}
-
-		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
-		this.throwIfCancelled(token);
-		this.turn.addReferences(buildPromptResult.references);
-		// Possible the tool call resulted in new tools getting added.
-		availableTools = await this.getAvailableTools(outputStream, token);
-
-		const isToolInputFailure = buildPromptResult.metadata.get(ToolFailureEncountered);
-		const conversationSummary = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
-		if (conversationSummary) {
-			this.turn.setMetadata(conversationSummary);
 		}
 		const tokenizer = endpoint.acquireTokenizer();
 		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);
