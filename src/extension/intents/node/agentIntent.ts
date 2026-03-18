@@ -366,7 +366,11 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		progress: vscode.Progress<vscode.ChatResponseReferencePart | vscode.ChatResponseProgressPart>,
 		token: vscode.CancellationToken
 	): Promise<IBuildPromptResult> {
-		this._resolvedCustomizations = await PromptRegistry.resolveAllCustomizations(this.instantiationService, this.endpoint);
+		// Use the endpoint override when available (e.g. after plan→implement model switch).
+		// This ensures the system prompt, token budgeting, and customizations match the
+		// actual model that will serve the request.
+		const effectiveEndpoint = promptContext.endpointOverride ?? this.endpoint;
+		this._resolvedCustomizations = await PromptRegistry.resolveAllCustomizations(this.instantiationService, effectiveEndpoint);
 		// Add any references from the codebase invocation to the request
 		const codebase = await this._getCodebaseReferences(promptContext, token);
 
@@ -378,7 +382,7 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 		}
 
 		const tools = promptContext.tools?.availableTools;
-		const toolTokens = tools?.length ? await this.endpoint.acquireTokenizer().countToolTokens(tools) : 0;
+		const toolTokens = tools?.length ? await effectiveEndpoint.acquireTokenizer().countToolTokens(tools) : 0;
 
 		const summarizeThresholdOverride = this.configurationService.getConfig<number | undefined>(ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold);
 		if (typeof summarizeThresholdOverride === 'number' && summarizeThresholdOverride < 100 && summarizeThresholdOverride > 0) {
@@ -387,17 +391,17 @@ export class AgentIntentInvocation extends EditCodeIntentInvocation implements I
 
 		// Reserve extra space when tools are involved due to token counting issues
 		const baseBudget = Math.min(
-			this.configurationService.getConfig<number | undefined>(ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold) ?? this.endpoint.modelMaxPromptTokens,
-			this.endpoint.modelMaxPromptTokens
+			this.configurationService.getConfig<number | undefined>(ConfigKey.Advanced.SummarizeAgentConversationHistoryThreshold) ?? effectiveEndpoint.modelMaxPromptTokens,
+			effectiveEndpoint.modelMaxPromptTokens
 		);
-		const useTruncation = this.endpoint.apiType === 'responses' && this.configurationService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation);
-		const responsesCompactionContextManagementEnabled = isResponsesCompactionContextManagementEnabled(this.endpoint, this.configurationService, this.expService);
+		const useTruncation = effectiveEndpoint.apiType === 'responses' && this.configurationService.getConfig(ConfigKey.Advanced.UseResponsesApiTruncation);
+		const responsesCompactionContextManagementEnabled = isResponsesCompactionContextManagementEnabled(effectiveEndpoint, this.configurationService, this.expService);
 		const summarizationEnabled = this.configurationService.getConfig(ConfigKey.SummarizeAgentConversationHistory) && this.prompt === AgentPrompt && !responsesCompactionContextManagementEnabled;
 		const backgroundCompactionEnabled = summarizationEnabled && this.configurationService.getExperimentBasedConfig(ConfigKey.BackgroundCompaction, this.expService);
 
 		const budgetThreshold = Math.floor((baseBudget - toolTokens) * 0.85);
 		const safeBudget = useTruncation ? Number.MAX_SAFE_INTEGER : budgetThreshold;
-		const endpoint = toolTokens > 0 ? this.endpoint.cloneWithTokenOverride(safeBudget) : this.endpoint;
+		const endpoint = toolTokens > 0 ? effectiveEndpoint.cloneWithTokenOverride(safeBudget) : effectiveEndpoint;
 
 		this.logService.debug(`AgentIntent: rendering with budget=${safeBudget} (baseBudget: ${baseBudget}, toolTokens: ${toolTokens}), summarizationEnabled=${summarizationEnabled}`);
 		let result: RenderPromptResult;

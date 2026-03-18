@@ -1093,19 +1093,10 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	/** Runs a single iteration of the tool calling loop. */
 	public async runOne(outputStream: ChatResponseStream | undefined, iterationNumber: number, token: CancellationToken): Promise<IToolCallSingleResult> {
 		let availableTools = await this.getAvailableTools(outputStream, token);
-		const context = this.createPromptContext(availableTools, outputStream);
-		const isContinuation = context.isContinuation || false;
-		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
-		this.throwIfCancelled(token);
-		this.turn.addReferences(buildPromptResult.references);
-		// Possible the tool call resulted in new tools getting added.
-		availableTools = await this.getAvailableTools(outputStream, token);
 
-		const isToolInputFailure = buildPromptResult.metadata.get(ToolFailureEncountered);
-		const conversationSummary = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
-		if (conversationSummary) {
-			this.turn.setMetadata(conversationSummary);
-		}
+		// Resolve endpoint override BEFORE building the prompt so that the
+		// prompt builder (AgentIntentInvocation) can use the correct model for
+		// system prompt customizations and token budgeting.
 		let endpoint: IChatEndpoint;
 		if (this._endpointFamilyOverride) {
 			try {
@@ -1118,6 +1109,27 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			}
 		} else {
 			endpoint = await this._endpointProvider.getChatEndpoint(this.options.request);
+		}
+
+		const context = this.createPromptContext(availableTools, outputStream);
+		const isContinuation = context.isContinuation || false;
+
+		// Pass the override endpoint to the prompt builder so it uses the
+		// correct model family for system prompt selection & token budgeting.
+		if (this._activeEndpointOverride) {
+			(context as { endpointOverride?: IChatEndpoint }).endpointOverride = this._activeEndpointOverride;
+		}
+
+		const buildPromptResult: IBuildPromptResult = await this.buildPrompt2(context, outputStream, token);
+		this.throwIfCancelled(token);
+		this.turn.addReferences(buildPromptResult.references);
+		// Possible the tool call resulted in new tools getting added.
+		availableTools = await this.getAvailableTools(outputStream, token);
+
+		const isToolInputFailure = buildPromptResult.metadata.get(ToolFailureEncountered);
+		const conversationSummary = buildPromptResult.metadata.get(SummarizedConversationHistoryMetadata);
+		if (conversationSummary) {
+			this.turn.setMetadata(conversationSummary);
 		}
 		const tokenizer = endpoint.acquireTokenizer();
 		const promptTokenLength = await tokenizer.countMessagesTokens(buildPromptResult.messages);

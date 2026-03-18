@@ -213,11 +213,10 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 		// Iterate over the turns in reverse order until we find a turn with a tool call round that was summarized
 		const history: PromptElement[] = [];
 
-		// If we have a stop hook query, add it as a new user message at the very end of the conversation.
-		// Push it first so that after history.reverse() it will be last.
-		if (this.props.promptContext.hasStopHookQuery) {
-			history.push(<UserMessage priority={901}>{this.props.promptContext.query}</UserMessage>);
-		}
+		// Stop hook queries (including plan→implement "Start implementation") are now
+		// rendered by AgentUserMessage with proper <userRequest> wrapping and context.
+		// No bare UserMessage is needed here — AgentUserMessage skips frozen content
+		// when hasStopHookQuery is true, so it renders the hook query fresh.
 
 		// Handle the possibility that we summarized partway through the current turn (e.g. if we accumulated many tool call rounds)
 		let summaryForCurrentTurn: string | undefined = undefined;

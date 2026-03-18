@@ -348,7 +348,12 @@ export class AgentUserMessage extends PromptElement<AgentUserMessageProps> {
 	}
 
 	async render(state: void, sizing: PromptSizing) {
-		const frozenContent = this.props.turn?.getMetadata(RenderedUserMessageMetadata)?.renderedUserMessage;
+		// Skip frozen content when hasStopHookQuery is true: the query has changed
+		// (e.g. plan→implement transition "Start implementation") and needs to be
+		// rendered fresh with proper <userRequest> wrapping and up-to-date context.
+		const frozenContent = this.props.hasStopHookQuery
+			? undefined
+			: this.props.turn?.getMetadata(RenderedUserMessageMetadata)?.renderedUserMessage;
 		if (frozenContent) {
 			return <FrozenContentUserMessage frozenContent={frozenContent} enableCacheBreakpoints={this.props.enableCacheBreakpoints} />;
 		}
