@@ -12,10 +12,10 @@ import { IChatHookService, UserPromptSubmitHookInput, UserPromptSubmitHookOutput
 import { CanceledResult, ChatFetchResponseType, ChatLocation, ChatResponse, getErrorDetailsFromChatFetchError } from '../../../platform/chat/common/commonTypes';
 import { IConversationOptions } from '../../../platform/chat/common/conversationOptions';
 import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
-import { IConfigurationService } from '../../../platform/configuration/common/configurationService';
+import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { IEditSurvivalTrackerService, IEditSurvivalTrackingSession, NullEditSurvivalTrackingSession } from '../../../platform/editSurvivalTracking/common/editSurvivalTrackerService';
 import { isAnthropicFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
-import { IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
+import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
 import { IOctoKitService } from '../../../platform/github/common/githubService';
 import { HAS_IGNORED_FILES_MESSAGE } from '../../../platform/ignore/common/ignoreService';
 import { ILogService } from '../../../platform/log/common/logService';
@@ -338,6 +338,10 @@ export class DefaultIntentRequestHandler {
 			},
 			this.chatTelemetryBuilder,
 		));
+
+		// For subagent requests, VS Code core may not set request.model from .agent.md model field.
+		// Resolve the configured model and set the endpoint override before the loop runs.
+		await loop.resolveSubagentEndpointOverride();
 
 		store.add(Event.once(loop.onDidBuildPrompt)(this._sendInitialChatReferences, this));
 
@@ -675,12 +679,44 @@ class DefaultToolCallingLoop extends ToolCallingLoop<IDefaultToolLoopOptions> {
 		return buildPromptResult;
 	}
 
+	/**
+	 * For subagent requests, VS Code core may not set request.model from the .agent.md
+	 * model field. Resolve the model from extension configuration and set the endpoint
+	 * override so that fetch() uses the correct model.
+	 *
+	 * Model resolution priority:
+	 * 1. VS Code core `chat.exploreAgent.defaultModel` — core setting
+	 * 2. `ConfigKey.ExploreAgentModel` — user-facing extension setting (`github.copilot.chat.exploreAgent.model`)
+	 * 3. No override — falls back to the parent request's model via invocation.endpoint
+	 */
+	async resolveSubagentEndpointOverride(): Promise<void> {
+		if (!this.options.request.subAgentInvocationId) {
+			return;
+		}
+
+		const coreDefaultModel = this._configurationService.getNonExtensionConfig<string>('chat.exploreAgent.defaultModel');
+		const exploreAgentModel = this._configurationService.getConfig(ConfigKey.ExploreAgentModel);
+		const modelOverride = coreDefaultModel || exploreAgentModel;
+
+		this._logService.info(`[SubagentEndpoint] Subagent model resolution: coreDefaultModel=${JSON.stringify(coreDefaultModel)}, exploreAgentModel=${JSON.stringify(exploreAgentModel)}, resolved=${JSON.stringify(modelOverride)}`);
+
+		if (modelOverride) {
+			try {
+				const endpoint = await this._endpointProvider.getChatEndpoint(modelOverride as ChatEndpointFamily);
+				this._activeEndpointOverride = endpoint;
+				this._logService.info(`[SubagentEndpoint] Overriding subagent endpoint to model: ${endpoint.family}`);
+			} catch (e) {
+				this._logService.warn(`[SubagentEndpoint] Failed to resolve model '${modelOverride}' for subagent, using request model: ${e}`);
+			}
+		}
+	}
+
 	protected override async fetch(opts: ToolCallingLoopFetchOptions, token: CancellationToken): Promise<ChatResponse> {
 		const messageSourcePrefix = this.options.location === ChatLocation.Editor ? 'inline' : 'chat';
 		const debugName = this.options.request.subAgentInvocationId ?
 			`tool/runSubagent${this.options.request.subAgentName ? `-${this.options.request.subAgentName}` : ''}` :
 			`${ChatLocation.toStringShorter(this.options.location)}/${this.options.intent?.id}`;
-		// Use the override endpoint if available (e.g. after startImplementation model switch)
+		// Use the override endpoint if available (e.g. after startImplementation model switch or subagent model override)
 		const endpoint = this._activeEndpointOverride ?? this.options.invocation.endpoint;
 		if (this.options.request.subAgentInvocationId) {
 			this._logService.info(`[SubagentEndpoint] fetch(): debugName=${debugName}, endpoint.family=${endpoint.family}, endpoint.model=${endpoint.model}, endpoint.name=${endpoint.name}`);

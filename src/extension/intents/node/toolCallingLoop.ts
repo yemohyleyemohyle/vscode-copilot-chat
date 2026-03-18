@@ -215,7 +215,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	constructor(
 		protected readonly options: TOptions,
 		@IInstantiationService private readonly _instantiationService: IInstantiationService,
-		@IEndpointProvider private readonly _endpointProvider: IEndpointProvider,
+		@IEndpointProvider protected readonly _endpointProvider: IEndpointProvider,
 		@ILogService protected readonly _logService: ILogService,
 		@IRequestLogger private readonly _requestLogger: IRequestLogger,
 		@IAuthenticationChatUpgradeService private readonly _authenticationChatUpgradeService: IAuthenticationChatUpgradeService,
