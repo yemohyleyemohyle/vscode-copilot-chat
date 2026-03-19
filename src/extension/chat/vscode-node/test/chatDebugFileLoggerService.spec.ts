@@ -6,8 +6,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { IConfigurationService } from '../../../../platform/configuration/common/configurationService';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ConfigKey, IConfigurationService } from '../../../../platform/configuration/common/configurationService';
 import { IVSCodeExtensionContext } from '../../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../../platform/log/common/logService';
@@ -15,7 +15,7 @@ import { CopilotChatAttr, GenAiAttr, GenAiOperationName } from '../../../../plat
 import { ICompletedSpanData, IOTelService, SpanStatusCode } from '../../../../platform/otel/common/otelService';
 import { IExperimentationService, NullExperimentationService } from '../../../../platform/telemetry/common/nullExperimentationService';
 import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry';
-import { Emitter } from '../../../../util/vs/base/common/event';
+import { Emitter, Event } from '../../../../util/vs/base/common/event';
 import { DisposableStore } from '../../../../util/vs/base/common/lifecycle';
 import { URI } from '../../../../util/vs/base/common/uri';
 import { ChatDebugFileLoggerService } from '../chatDebugFileLoggerService';
@@ -118,8 +118,13 @@ class TestFileSystemService {
 		await fs.promises.mkdir(uri.fsPath, { recursive: true });
 	}
 
-	async delete(uri: URI) {
-		await fs.promises.unlink(uri.fsPath);
+	async delete(uri: URI, options?: { recursive?: boolean }) {
+		const stats = await fs.promises.stat(uri.fsPath);
+		if (stats.isDirectory() && options?.recursive) {
+			await fs.promises.rm(uri.fsPath, { recursive: true, force: true });
+		} else {
+			await fs.promises.unlink(uri.fsPath);
+		}
 	}
 }
 
@@ -134,7 +139,14 @@ class TestLogService {
 
 class TestConfigurationService {
 	declare readonly _serviceBrand: undefined;
-	getExperimentBasedConfig() { return true; }
+	getConfig(key: { defaultValue: unknown }) { return key.defaultValue; }
+	getExperimentBasedConfig(key: { defaultValue: unknown }) {
+		if (key === ConfigKey.Advanced.ChatDebugFileLogging) {
+			return true; // Enable file logging for tests
+		}
+		return key.defaultValue;
+	}
+	onDidChangeConfiguration = Event.None;
 }
 
 class TestTelemetryService {
@@ -179,7 +191,8 @@ describe('ChatDebugFileLoggerService', () => {
 		return content.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
 	}
 
-	it('auto-starts session and writes tool call span', async () => {
+	it('writes tool call span for explicitly started session', async () => {
+		await service.startSession('session-1');
 		const span = makeToolCallSpan('session-1', 'read_file');
 		otelService.fireSpan(span);
 
@@ -197,6 +210,7 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('writes LLM request with token counts', async () => {
+		await service.startSession('session-1');
 		const span = makeChatSpan('session-1', 'gpt-4o', 1000, 500);
 		otelService.fireSpan(span);
 
@@ -213,6 +227,7 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('records error status from failed spans', async () => {
+		await service.startSession('session-1');
 		const span = makeSpan({
 			attributes: {
 				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
@@ -231,7 +246,7 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('isDebugLogUri returns true for files under debug-logs', () => {
-		const debugLogUri = URI.joinPath(URI.file(tmpDir), 'debug-logs', 'session-1.jsonl');
+		const debugLogUri = URI.joinPath(URI.file(tmpDir), 'debug-logs', 'session-1', 'main.jsonl');
 		expect(service.isDebugLogUri(debugLogUri)).toBe(true);
 	});
 
@@ -241,14 +256,15 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('endSession flushes and removes session', async () => {
+		await service.startSession('session-1');
 		otelService.fireSpan(makeToolCallSpan('session-1', 'read_file'));
 		expect(service.getActiveSessionIds()).toContain('session-1');
 
 		await service.endSession('session-1');
 		expect(service.getActiveSessionIds()).not.toContain('session-1');
 
-		// File should have been written
-		const logPath = URI.joinPath(URI.file(tmpDir), 'debug-logs', 'session-1.jsonl');
+		// File should have been written in directory structure
+		const logPath = URI.joinPath(URI.file(tmpDir), 'debug-logs', 'session-1', 'main.jsonl');
 		const content = await fs.promises.readFile(logPath.fsPath, 'utf-8');
 		expect(content.trim()).not.toBe('');
 	});
@@ -267,7 +283,8 @@ describe('ChatDebugFileLoggerService', () => {
 	});
 
 	it('truncates long attribute values', async () => {
-		const longArgs = 'x'.repeat(1000);
+		await service.startSession('session-1');
+		const longArgs = 'x'.repeat(6000);
 		const span = makeSpan({
 			attributes: {
 				[GenAiAttr.OPERATION_NAME]: GenAiOperationName.EXECUTE_TOOL,
@@ -284,5 +301,88 @@ describe('ChatDebugFileLoggerService', () => {
 		const args = (entries[0].attrs as Record<string, unknown>).args as string;
 		expect(args.length).toBeLessThan(longArgs.length);
 		expect(args).toContain('[truncated]');
+	});
+
+	it('routes child session spans to parent directory with cross-reference', async () => {
+		// First, create a parent session
+		otelService.fireSpan(makeToolCallSpan('parent-session', 'read_file'));
+
+		// Fire a child session span (e.g., title generation) with parent info
+		const titleSpan = makeChatSpan('title-child-id', 'gpt-4o-mini', 100, 20);
+		const titleSpanWithParent: ICompletedSpanData = {
+			...titleSpan,
+			attributes: {
+				...titleSpan.attributes,
+				[CopilotChatAttr.PARENT_CHAT_SESSION_ID]: 'parent-session',
+				[CopilotChatAttr.DEBUG_LOG_LABEL]: 'title',
+			},
+		};
+		otelService.fireSpan(titleSpanWithParent);
+
+		await service.flush('parent-session');
+		await service.flush('title-child-id');
+
+		// Parent's main.jsonl should contain the tool call + a child_session_ref
+		const parentEntries = await readLogEntries('parent-session');
+		const refEntry = parentEntries.find(e => e.type === 'child_session_ref');
+		expect(refEntry).toBeDefined();
+		expect((refEntry!.attrs as Record<string, unknown>).childLogFile).toBe('title-title-child-id.jsonl');
+		expect((refEntry!.attrs as Record<string, unknown>).label).toBe('title');
+
+		// Child's log file should be under the parent directory
+		const childPath = service.getLogPath('title-child-id');
+		expect(childPath).toBeDefined();
+		expect(childPath!.fsPath).toContain('parent-session');
+		expect(childPath!.fsPath).toContain('title-title-child-id.jsonl');
+
+		// Child should have the LLM request entry
+		const childEntries = await readLogEntries('title-child-id');
+		expect(childEntries).toHaveLength(1);
+		expect(childEntries[0].type).toBe('llm_request');
+	});
+
+	it('restarts flush timer when flushIntervalMs config changes at runtime', async () => {
+		let configuredInterval = 4000;
+		const configChangeEmitter = new Emitter<{ affectsConfiguration: (key: string) => boolean }>();
+
+		const configService = {
+			_serviceBrand: undefined as undefined,
+			getConfig: () => configuredInterval,
+			getExperimentBasedConfig: () => true,
+			onDidChangeConfiguration: configChangeEmitter.event,
+		};
+
+		const svc = new ChatDebugFileLoggerService(
+			otelService as unknown as IOTelService,
+			new TestFileSystemService() as unknown as IFileSystemService,
+			new TestExtensionContext(tmpDir) as unknown as IVSCodeExtensionContext,
+			new TestLogService() as unknown as ILogService,
+			configService as unknown as IConfigurationService,
+			new NullExperimentationService() as unknown as IExperimentationService,
+			new TestTelemetryService() as unknown as ITelemetryService,
+		);
+		disposables.add(svc);
+		disposables.add(configChangeEmitter);
+
+		// Start a session so the flush timer is running
+		const span = makeToolCallSpan('interval-test', 'read_file');
+		otelService.fireSpan(span);
+		expect(svc.getActiveSessionIds()).toContain('interval-test');
+
+		// Spy on clearInterval/setInterval to verify timer restart
+		const clearSpy = vi.spyOn(globalThis, 'clearInterval');
+		const setSpy = vi.spyOn(globalThis, 'setInterval');
+
+		// Change the configured interval and fire the config change event
+		configuredInterval = 8000;
+		configChangeEmitter.fire({
+			affectsConfiguration: key => key === ConfigKey.Advanced.ChatDebugFileLoggingFlushInterval.fullyQualifiedId,
+		});
+
+		expect(clearSpy).toHaveBeenCalled();
+		expect(setSpy).toHaveBeenCalledWith(expect.any(Function), 8000);
+
+		clearSpy.mockRestore();
+		setSpy.mockRestore();
 	});
 });

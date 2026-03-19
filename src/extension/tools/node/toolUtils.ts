@@ -6,6 +6,7 @@
 import { PromptElement, PromptPiece } from '@vscode/prompt-tsx';
 import type * as vscode from 'vscode';
 import { IChatDebugFileLoggerService } from '../../../platform/chat/common/chatDebugFileLoggerService';
+import { ISessionTranscriptService } from '../../../platform/chat/common/sessionTranscriptService';
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { ICustomInstructionsService, IInstructionIndexFile } from '../../../platform/customInstructions/common/customInstructionsService';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
@@ -171,6 +172,7 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	const diskSessionResources = accessor.get(IChatDiskSessionResources);
 	const configurationService = accessor.get(IConfigurationService);
 	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
+	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
 
 	await assertFileNotContentExcluded(accessor, uri);
 
@@ -194,6 +196,9 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
 		return;
 	}
+	if (sessionTranscriptService.isTranscriptUri(normalizedUri)) {
+		return;
+	}
 	if (await isExternalInstructionsFile(normalizedUri, customInstructionsService, buildPromptContext)) {
 		return;
 	}
@@ -201,7 +206,7 @@ export async function assertFileOkForTool(accessor: ServicesAccessor, uri: URI, 
 }
 
 async function isExternalInstructionsFile(normalizedUri: URI, customInstructionsService: ICustomInstructionsService, buildPromptContext?: IBuildPromptContext): Promise<boolean> {
-	if (normalizedUri.scheme === 'vscode-chat-internal') {
+	if (normalizedUri.scheme === 'vscode-chat-internal' || normalizedUri.scheme === 'copilot-skill') {
 		return true;
 	}
 	if (buildPromptContext) {
@@ -269,6 +274,7 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 	const configurationService = accessor.get(IConfigurationService);
 	const fileSystemService = accessor.get(IFileSystemService);
 	const chatDebugFileLogger = accessor.get(IChatDebugFileLoggerService);
+	const sessionTranscriptService = accessor.get(ISessionTranscriptService);
 
 	const normalizedUri = normalizePath(uri);
 
@@ -289,6 +295,9 @@ export async function isFileExternalAndNeedsConfirmation(accessor: ServicesAcces
 		return false;
 	}
 	if (chatDebugFileLogger.isDebugLogUri(normalizedUri)) {
+		return false;
+	}
+	if (sessionTranscriptService.isTranscriptUri(normalizedUri)) {
 		return false;
 	}
 	if (tabsAndEditorsService.tabs.some(tab => isEqual(tab.uri, uri))) {
