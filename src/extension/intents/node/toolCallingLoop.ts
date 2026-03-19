@@ -14,8 +14,8 @@ import { IHistoricalTurn, ISessionTranscriptService, ToolRequest } from '../../.
 import { ConfigKey, IConfigurationService } from '../../../platform/configuration/common/configurationService';
 import { isAnthropicFamily, isGeminiFamily } from '../../../platform/endpoint/common/chatModelCapabilities';
 import { ChatEndpointFamily, IEndpointProvider } from '../../../platform/endpoint/common/endpointProvider';
-import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { rawPartAsThinkingData } from '../../../platform/endpoint/common/thinkingDataContainer';
+import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { ILogService } from '../../../platform/log/common/logService';
 import { isOpenAIContextManagementResponse, OpenAiFunctionDef } from '../../../platform/networking/common/fetch';
 import { IChatEndpoint, IMakeChatRequestOptions } from '../../../platform/networking/common/networking';
