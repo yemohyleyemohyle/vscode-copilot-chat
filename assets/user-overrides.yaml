@@ -1,5 +1,5 @@
 modelSelector:
-    id: claude-sonnet-4
+    id: claude-opus-4.6
     vendor: copilot
 
 installExtensions:
@@ -9,7 +9,7 @@ installExtensions:
 
 chatMode: Plan
 vscodeSettings:
-    chat.planAgent.defaultModel: 'claude-sonnet-4'
+    chat.planAgent.defaultModel: 'claude-opus-4.6'
     github.copilot.chat.implementAgent.model: 'claude-sonnet-4'
     github.copilot.chat.exploreAgent.model: 'claude-sonnet-4'
     github.copilot.chat.planAgent.autoHandoff: true
