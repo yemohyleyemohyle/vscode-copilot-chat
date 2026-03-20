@@ -38,11 +38,12 @@ export class ToolsContribution extends Disposable {
 			if (isVscodeLanguageModelTool(tool)) {
 				const contributedName = getContributedToolName(name);
 				this._register(vscode.lm.registerTool(contributedName, tool));
-				registeredToolNames.push(contributedName);
+				registeredToolNames.push(`${contributedName} (internal: ${name})`);
 			}
 		}
 		// Log all registered tools to help debug tool availability issues
 		// (e.g. Plan agent not seeing startImplementation)
+		// Note: these are the names VS Code core uses to match .agent.md tool references
 		console.log(`[ToolsContribution] Registered ${registeredToolNames.length} copilot tools with vscode.lm: [${registeredToolNames.join(', ')}]`);
 
 		const modelSpecificTools = this._register(new DisposableMap<string>());

@@ -82,6 +82,13 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		// Generate .agent.md content
 		const content = buildAgentMarkdown(config);
 
+		// Log the YAML frontmatter so we can verify exactly what core receives
+		const frontmatterEnd = content.indexOf('---', 4);
+		if (frontmatterEnd > 0) {
+			const frontmatter = content.substring(0, frontmatterEnd + 3);
+			this.logService.info(`[PlanAgentProvider] provideCustomAgents: .agent.md frontmatter:\n${frontmatter}`);
+		}
+
 		// Write to cache file and return URI
 		const fileUri = await this.writeCacheFile(content);
 		this.logService.info(`[PlanAgentProvider] provideCustomAgents: wrote agent file to ${fileUri.toString()}`);
@@ -217,7 +224,7 @@ Your SOLE responsibility is planning. NEVER start implementation yourself.
 - Do NOT ask the user questions — this is an unattended run. Make reasonable assumptions and document them in the plan.
 - When facing ambiguity, choose the most conventional/standard approach and note your decision in the plan.
 - Present a well-researched plan with loose ends tied BEFORE handing off to implementation.
-- After saving the plan to \`/memories/session/plan.md\`, call vscode_startImplementation to begin implementation immediately. This is a direct tool call — do NOT use runSubagent to invoke it.
+- After saving the plan to \`/memories/session/plan.md\`, call the startImplementation tool to begin implementation immediately. This is a direct tool call — do NOT use runSubagent to invoke it.
 </rules>
 
 <workflow>
@@ -244,7 +251,7 @@ Save the comprehensive plan document to \`/memories/session/plan.md\` via memory
 
 ## 3. Handoff
 
-After saving the plan to \`/memories/session/plan.md\`, immediately make a direct tool call to vscode_startImplementation to transition to Agent mode for implementation. Do NOT use runSubagent for this — call the tool directly. Do NOT wait for user approval.
+After saving the plan to \`/memories/session/plan.md\`, immediately call the startImplementation tool to transition to Agent mode for implementation. Do NOT use runSubagent for this — call the tool directly. Do NOT wait for user approval.
 </workflow>
 
 <plan_style_guide>
