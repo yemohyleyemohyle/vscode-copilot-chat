@@ -99,7 +99,7 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 	}
 
 	async invoke(_options: vscode.LanguageModelToolInvocationOptions<IStartImplementationParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
-		this.logService.info('[StartImplementationTool] invoke: entry');
+		this.logService.info('[StartImplementationTool] invoke: entry, timestamp=' + Date.now());
 
 		// Resolve the implement agent model for the deferred handoff's modelSelector
 		const resolvedModel = await this.resolveImplementModel();
@@ -163,6 +163,8 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 		this.logService.info(`[StartImplementationTool] Scheduling deferred handoff in ${StartImplementationTool.HANDOFF_DELAY_MS}ms`);
 
 		setTimeout(async () => {
+			const timerFiredAt = Date.now();
+			this.logService.info(`[StartImplementationTool] Deferred handoff timer fired at timestamp=${timerFiredAt}`);
 			try {
 				// Try to discover the handoff via core's getHandoffs API.
 				// This may return a dynamically-generated plan summary as the prompt.
@@ -171,7 +173,12 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 				const prompt = handoff?.prompt || StartImplementationTool.FALLBACK_PROMPT;
 				const targetMode = handoff?.agent || 'agent';
 
-				this.logService.info(`[StartImplementationTool] Submitting deferred handoff: mode=${targetMode}, prompt=${prompt.substring(0, 100)}..., usedGetHandoffs=${!!handoff}`);
+				this.logService.info(
+					`[StartImplementationTool] Submitting deferred handoff: ` +
+					`mode=${targetMode}, usedGetHandoffs=${!!handoff}, ` +
+					`promptSource=${handoff ? 'getHandoffs' : 'FALLBACK_PROMPT'}, ` +
+					`fullPrompt="${prompt}"`
+				);
 
 				const chatOpenArgs: Record<string, unknown> = {
 					query: prompt,
@@ -180,6 +187,7 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 				if (resolvedModel) {
 					chatOpenArgs.modelSelector = { id: resolvedModel.id, vendor: resolvedModel.vendor };
 				}
+				this.logService.info(`[StartImplementationTool] Calling chat.open with args: ${JSON.stringify(chatOpenArgs)}`);
 				await vscode.commands.executeCommand('workbench.action.chat.open', chatOpenArgs);
 				this.logService.info('[StartImplementationTool] Deferred handoff submitted successfully');
 			} catch (e) {
