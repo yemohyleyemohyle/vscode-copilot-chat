@@ -264,7 +264,7 @@ suite('PlanAgentProvider', () => {
 
 		// Should preserve body content
 		assert.ok(content.includes('You are a PLANNING AGENT, pairing with the user'));
-		assert.ok(content.includes('Your SOLE responsibility is planning. NEVER start implementation.'));
+		assert.ok(content.includes('You create plans but do NOT implement changes directly'));
 	});
 
 	test('handles empty additionalTools array gracefully', async () => {
@@ -427,7 +427,7 @@ suite('PlanAgentProvider', () => {
 		const content = await getAgentContent(agents[0]);
 
 		assert.ok(content.includes('pairing with the user'), 'Should contain interactive mode instructions');
-		assert.ok(content.includes('vscode_askQuestions'), 'Should reference askQuestions in interactive body');
+		assert.ok(content.includes('call the startImplementation tool'), 'Should instruct calling startImplementation in interactive body');
 		assert.ok(!content.includes('UNATTENDED mode'), 'Should not contain UNATTENDED mode instructions');
 	});
 });
