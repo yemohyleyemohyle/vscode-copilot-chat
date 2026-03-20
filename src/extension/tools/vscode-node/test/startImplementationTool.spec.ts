@@ -28,6 +28,7 @@ suite('StartImplementationTool', () => {
 
 	afterEach(() => {
 		vi.restoreAllMocks();
+		vi.useRealTimers();
 	});
 
 	test('has correct static toolName matching ToolName enum', () => {
@@ -188,11 +189,12 @@ suite('StartImplementationTool', () => {
 			]);
 		});
 
-		test('does not have deferred resubmission methods', () => {
-			// The tool should NOT have any deferred resubmission logic.
-			// The ToolCallingLoop handles the follow-up in-band.
-			assert.equal(typeof (tool as any).scheduleDeferredResubmission, 'undefined');
-			assert.equal(typeof (tool as any).submitImplementationRequest, 'undefined');
+		test('has scheduleDeferredHandoff method for deferred chat.open submission', () => {
+			// The tool uses scheduleDeferredHandoff to submit a deferred chat.open
+			// command after the Plan response completes. This is necessary because
+			// Plan mode uses target: 'vscode' (VS Code core owns the loop), making
+			// the ToolCallingLoop._runLoop() follow-up injection dead code.
+			assert.equal(typeof (tool as any).scheduleDeferredHandoff, 'function');
 		});
 
 		test('returns tool result that tells planner to conclude', async () => {
@@ -207,7 +209,7 @@ suite('StartImplementationTool', () => {
 			}
 		});
 
-		test('only calls toggleAgentMode and changeModel — no type/submit/focus commands', async () => {
+		test('invoke only calls toggleAgentMode and changeModel synchronously — chat.open is deferred', async () => {
 			getConfigurationSpy.mockReturnValue({
 				get: () => 'claude-opus-4.6',
 			} as any);
@@ -216,14 +218,74 @@ suite('StartImplementationTool', () => {
 				{ vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' },
 			] as any);
 
+			vi.useFakeTimers();
 			await tool.invoke(fakeOptions, fakeToken);
 
+			// Synchronous commands: only toggleAgentMode and changeModel
 			const allCommands = executeCommandSpy.mock.calls.map((c: any) => c[0]);
 			assert.notInclude(allCommands, 'type');
 			assert.notInclude(allCommands, 'workbench.action.chat.submit');
 			assert.notInclude(allCommands, 'workbench.panel.chat.view.copilot.focus');
-			assert.notInclude(allCommands, 'workbench.action.chat.open');
 			assert.notInclude(allCommands, 'editor.action.selectAll');
+			// chat.open is NOT called synchronously — it's deferred via setTimeout
+			assert.notInclude(allCommands, 'workbench.action.chat.open');
+		});
+
+		test('deferred handoff calls chat.open after timeout fires', async () => {
+			vi.useFakeTimers();
+			await tool.invoke(fakeOptions, fakeToken);
+
+			// Before timeout: no chat.open call
+			const chatOpenBefore = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.open');
+			assert.equal(chatOpenBefore.length, 0);
+
+			// Advance timers to trigger the deferred handoff
+			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS);
+
+			// After timeout: chat.open should have been called
+			const chatOpenAfter = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.open');
+			assert.equal(chatOpenAfter.length, 1);
+			assert.deepStrictEqual(chatOpenAfter[0][1], {
+				query: 'Start implementation. Read the plan from /memories/session/plan.md and execute it.',
+				mode: 'agent',
+			});
+		});
+
+		test('deferred handoff includes modelSelector when model is configured', async () => {
+			vi.useFakeTimers();
+
+			getConfigurationSpy.mockReturnValue({
+				get: () => 'claude-sonnet-4',
+			} as any);
+
+			selectChatModelsSpy.mockResolvedValue([
+				{ vendor: 'copilot', id: 'claude-sonnet-4', family: 'claude-sonnet' },
+			] as any);
+
+			await tool.invoke(fakeOptions, fakeToken);
+			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS);
+
+			const chatOpenCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.open');
+			assert.equal(chatOpenCalls.length, 1);
+			assert.deepStrictEqual(chatOpenCalls[0][1], {
+				query: 'Start implementation. Read the plan from /memories/session/plan.md and execute it.',
+				mode: 'agent',
+				modelSelector: { id: 'claude-sonnet-4', vendor: 'copilot' },
+			});
+		});
+
+		test('deferred handoff does not include modelSelector when no model configured', async () => {
+			vi.useFakeTimers();
+			await tool.invoke(fakeOptions, fakeToken);
+			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS);
+
+			const chatOpenCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.open');
+			assert.equal(chatOpenCalls.length, 1);
+			// No modelSelector property
+			assert.deepStrictEqual(chatOpenCalls[0][1], {
+				query: 'Start implementation. Read the plan from /memories/session/plan.md and execute it.',
+				mode: 'agent',
+			});
 		});
 	});
 });

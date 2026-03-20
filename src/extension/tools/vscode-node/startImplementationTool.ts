@@ -23,11 +23,14 @@ interface IStartImplementationParams {
  *
  * Designed for unattended/container environments where nobody clicks handoff buttons.
  *
- * After this tool returns, the {@link ToolCallingLoop} detects the
- * `vscode_startImplementation` tool call in the completed round and injects
- * a follow-up "Start implementation" query into the next iteration. This
- * keeps the implementation within the same request pipeline, so the test
- * harness (and any external automation) sees the full trajectory.
+ * **Architecture note**: Plan mode uses `target: 'vscode'`, meaning VS Code core
+ * owns the tool calling loop. The extension's {@link ToolCallingLoop._runLoop}
+ * never executes for Plan mode, so the in-loop follow-up injection
+ * (`_followUpQuery` at ~line 930 of toolCallingLoop.ts) is dead code for this flow.
+ *
+ * To work around this, after toggling the mode and model, this tool schedules a
+ * **deferred `chat.open` command** via `setTimeout` that submits the implementation
+ * prompt to Agent mode after the Plan response completes.
  */
 export class StartImplementationTool implements ICopilotTool<IStartImplementationParams> {
 	public static readonly toolName = ToolName.StartImplementation;
@@ -107,11 +110,17 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 			this.logService.info('[StartImplementationTool] invoke: no model override, skipping changeModel');
 		}
 
-		// Return a result that concludes the planning turn. The ToolCallingLoop
-		// will detect this tool name in the completed round and automatically
-		// inject a follow-up "Start implementation" query as the next iteration,
-		// keeping everything within the same request pipeline.
-		this.logService.info('[StartImplementationTool] invoke: returning tool result (loop will inject follow-up)');
+		// Schedule a deferred chat.open to submit the implementation prompt.
+		//
+		// Plan mode uses `target: 'vscode'`, so VS Code core owns the tool calling loop.
+		// The extension's ToolCallingLoop._runLoop() never executes for Plan mode, making
+		// the in-loop follow-up injection (~line 930 of toolCallingLoop.ts) dead code.
+		// We schedule a deferred chat.open command that fires after the Plan response
+		// completes, submitting the implementation prompt to Agent mode in the same session.
+		this.scheduleDeferredHandoff(resolvedModel);
+
+		// Return a result that concludes the planning turn.
+		this.logService.info('[StartImplementationTool] invoke: returning tool result (deferred handoff scheduled)');
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(
 				'Planning phase completed successfully. The session mode has been switched to Agent for implementation. ' +
@@ -126,6 +135,44 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 			invocationMessage: new MarkdownString(vscode.l10n.t('Starting implementation...')),
 			pastTenseMessage: new MarkdownString(vscode.l10n.t('Started implementation')),
 		};
+	}
+
+	/**
+	 * The delay (in ms) before submitting the deferred implementation request.
+	 * After this tool returns, VS Code core sends the result to the model, the model
+	 * produces a brief summary, and the Plan response completes. This delay must be
+	 * long enough for that sequence to finish.
+	 */
+	static readonly HANDOFF_DELAY_MS = 5000;
+
+	/**
+	 * Schedule a deferred `workbench.action.chat.open` command to submit the
+	 * implementation prompt after the Plan response completes.
+	 *
+	 * Plan mode uses `target: 'vscode'`, so VS Code core owns the tool calling loop.
+	 * After this tool returns, core sends the result to the model, the model produces
+	 * a brief summary, and the response completes. We use a delay to ensure the
+	 * response has finished before submitting the follow-up.
+	 */
+	scheduleDeferredHandoff(resolvedModel?: { vendor: string; id: string; family: string }): void {
+		this.logService.info(`[StartImplementationTool] Scheduling deferred handoff in ${StartImplementationTool.HANDOFF_DELAY_MS}ms`);
+
+		setTimeout(async () => {
+			try {
+				this.logService.info('[StartImplementationTool] Submitting deferred implementation request via chat.open');
+				const chatOpenArgs: Record<string, unknown> = {
+					query: 'Start implementation. Read the plan from /memories/session/plan.md and execute it.',
+					mode: 'agent',
+				};
+				if (resolvedModel) {
+					chatOpenArgs.modelSelector = { id: resolvedModel.id, vendor: resolvedModel.vendor };
+				}
+				await vscode.commands.executeCommand('workbench.action.chat.open', chatOpenArgs);
+				this.logService.info('[StartImplementationTool] Deferred implementation request submitted successfully');
+			} catch (e) {
+				this.logService.error(`[StartImplementationTool] Failed to submit deferred implementation request: ${e}`);
+			}
+		}, StartImplementationTool.HANDOFF_DELAY_MS);
 	}
 }
 

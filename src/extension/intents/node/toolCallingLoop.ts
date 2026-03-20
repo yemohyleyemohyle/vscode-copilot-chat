@@ -174,11 +174,16 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * A follow-up query injected by in-loop detection (e.g. after
 	 * `vscode_startImplementation`). Unlike {@link stopHookReason}, this is
 	 * used as-is without wrapping in `formatHookContext`.
+	 *
+	 * NOTE: Dead code for Plan mode — Plan uses `target: 'vscode'` so this
+	 * loop never runs. Plan mode handoff is handled by
+	 * `StartImplementationTool.scheduleDeferredHandoff()`.
 	 */
 	private _followUpQuery: string | undefined;
 
 	/**
 	 * Guard to ensure a startImplementation follow-up fires at most once.
+	 * See {@link _followUpQuery} for dead-code note.
 	 */
 	private _startImplFollowUpDone = false;
 
@@ -186,12 +191,14 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 * When set, overrides the endpoint/model used by `runOne`. Read from
 	 * `ConfigKey.ImplementAgentModel` after a `startImplementation` tool call.
 	 * Uses the same pattern as {@link SearchSubagentToolCallingLoop.getEndpoint}.
+	 * See {@link _followUpQuery} for dead-code note.
 	 */
 	private _endpointFamilyOverride: string | undefined;
 
 	/**
 	 * The resolved endpoint when `_endpointFamilyOverride` is set.
 	 * Subclasses can use this in `fetch()` to send requests to the overridden model.
+	 * See {@link _followUpQuery} for dead-code note.
 	 */
 	protected _activeEndpointOverride: IChatEndpoint | undefined;
 
@@ -927,6 +934,15 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 					// If so, inject a follow-up "Start implementation" query to keep
 					// the implementation within the same request pipeline. This avoids
 					// timer-based deferred submission which races with the test harness.
+					//
+					// NOTE: This code is currently DEAD CODE for Plan mode because Plan
+					// uses `target: 'vscode'` (VS Code core owns the tool calling loop).
+					// The extension's _runLoop() never executes for Plan mode, so this
+					// detection never fires. The actual handoff for Plan mode is handled
+					// by StartImplementationTool.scheduleDeferredHandoff() which uses a
+					// deferred chat.open command. This code is retained as a fallback for
+					// any future non-Plan agent that might use startImplementation with
+					// `target: 'extension'`.
 					if (!this._startImplFollowUpDone && result.response.type === ChatFetchResponseType.Success) {
 						const hasStartImpl = this.toolCallRounds.some(r =>
 							r.toolCalls.some(tc => tc.name === ToolName.StartImplementation)
