@@ -217,7 +217,19 @@ class ConversationHistory extends PromptElement<SummarizedAgentHistoryProps> {
 		// If we have a stop hook query, add it as a new user message at the very end of the conversation.
 		// Push it first so that after history.reverse() it will be last.
 		if (this.props.promptContext.hasStopHookQuery) {
-			history.push(<UserMessage priority={901}>{this.props.promptContext.query}</UserMessage>);
+			if (this.props.promptContext.hasFollowUpQuery) {
+				// Follow-up query (e.g. startImplementation handoff): render as a full AgentUserMessage
+				// with <context>, <reminderInstructions>, <userRequest> wrapping.
+				// Pass turn={undefined} to skip frozen content (which would return the original plan message).
+				history.push(<AgentUserMessage flexGrow={2} priority={901} {...getUserMessagePropsFromAgentProps(this.props, {
+					userQueryTagName: this.props.userQueryTagName,
+					ReminderInstructionsClass: this.props.ReminderInstructionsClass,
+					ToolReferencesHintClass: this.props.ToolReferencesHintClass,
+				})} turn={undefined} />);
+			} else {
+				// Stop hook query (e.g. autopilot, user hooks): render as plain text.
+				history.push(<UserMessage priority={901}>{this.props.promptContext.query}</UserMessage>);
+			}
 		}
 
 		// Handle the possibility that we summarized partway through the current turn (e.g. if we accumulated many tool call rounds)

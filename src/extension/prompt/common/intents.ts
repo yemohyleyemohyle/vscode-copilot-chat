@@ -117,6 +117,13 @@ export interface IBuildPromptContext {
 	 */
 	readonly hasStopHookQuery?: boolean;
 	/**
+	 * True when the query is a follow-up injected by in-loop detection
+	 * (e.g. startImplementation handoff). Unlike stop hook queries, follow-up
+	 * queries should be rendered as a full AgentUserMessage with <context>,
+	 * <reminderInstructions>, and <userRequest> wrapping.
+	 */
+	readonly hasFollowUpQuery?: boolean;
+	/**
 	 * Additional context provided by a hook.
 	 */
 	readonly additionalHookContext?: string;

@@ -252,14 +252,18 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 		const isContinuation = this.turn.isContinuation || !!this.stopHookReason || !!this._followUpQuery;
 		let query: string;
 		let hasStopHookQuery = false;
+		let hasFollowUpQuery = false;
 		if (this._followUpQuery) {
 			// Follow-up query injected by in-loop detection (e.g. startImplementation).
 			// Used as-is, without formatHookContext wrapping.
 			// Set hasStopHookQuery so the prompt builder renders this as an actual
 			// UserMessage — otherwise isContinuation=true causes the user message
 			// to be skipped, and the model never sees the follow-up instruction.
+			// Also set hasFollowUpQuery so the prompt builder can render this with
+			// full <context>/<reminderInstructions>/<userRequest> wrapping.
 			query = this._followUpQuery;
 			hasStopHookQuery = true;
+			hasFollowUpQuery = true;
 			this._logService.info(`[ToolCallingLoop] Using follow-up query: ${query}`);
 			this._followUpQuery = undefined;
 		} else if (this.stopHookReason) {
@@ -295,6 +299,7 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 			},
 			isContinuation,
 			hasStopHookQuery,
+			hasFollowUpQuery,
 			modeInstructions: this.options.request.modeInstructions2,
 			additionalHookContext: this.additionalHookContext,
 		};
