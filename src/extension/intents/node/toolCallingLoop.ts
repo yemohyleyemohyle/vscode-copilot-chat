@@ -177,7 +177,9 @@ export abstract class ToolCallingLoop<TOptions extends IToolCallingLoopOptions =
 	 *
 	 * NOTE: Dead code for Plan mode — Plan uses `target: 'vscode'` so this
 	 * loop never runs. Plan mode handoff is handled by
-	 * `StartImplementationTool.scheduleDeferredHandoff()`.
+	 * `StartImplementationTool.scheduleDeferredHandoff()` which uses the
+	 * `getHandoffs` API to discover the dynamic plan summary and executes
+	 * it via `chat.open`.
 	 */
 	private _followUpQuery: string | undefined;
 

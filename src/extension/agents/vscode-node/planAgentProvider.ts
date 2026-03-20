@@ -74,6 +74,8 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 		_context: unknown,
 		_token: vscode.CancellationToken
 	): Promise<vscode.ChatResource[]> {
+		this.logService.info('[PlanAgentProvider] provideCustomAgents: VS Code core requested Plan agent definition');
+
 		// Build config with settings-based customization
 		const config = this.buildCustomizedConfig();
 
@@ -82,6 +84,7 @@ export class PlanAgentProvider extends Disposable implements vscode.ChatCustomAg
 
 		// Write to cache file and return URI
 		const fileUri = await this.writeCacheFile(content);
+		this.logService.info(`[PlanAgentProvider] provideCustomAgents: wrote agent file to ${fileUri.toString()}`);
 		return [{ uri: fileUri }];
 	}
 
@@ -278,6 +281,13 @@ Rules:
 
 		const implementAgentModelOverride = this.configurationService.getConfig(ConfigKey.ImplementAgentModel);
 
+		this.logService.info(
+			`[PlanAgentProvider] buildCustomizedConfig: autoHandoff=${autoHandoff}, ` +
+			`modelOverride=${modelOverride ?? '(none)'}, ` +
+			`implementAgentModel=${implementAgentModelOverride ?? '(none)'}, ` +
+			`additionalTools=[${additionalTools.join(', ')}]`
+		);
+
 		// Build handoffs dynamically with model override
 		const startImplementationHandoff: AgentHandoff = {
 			label: 'Start Implementation',
@@ -313,12 +323,22 @@ Rules:
 			: [...BASE_PLAN_AGENT_CONFIG.tools];
 
 		// Start with base config
-		return {
+		const handoffs = [startImplementationHandoff, openInEditorHandoff, ...(BASE_PLAN_AGENT_CONFIG.handoffs ?? [])];
+		const finalConfig = {
 			...BASE_PLAN_AGENT_CONFIG,
 			tools,
-			handoffs: [startImplementationHandoff, openInEditorHandoff, ...(BASE_PLAN_AGENT_CONFIG.handoffs ?? [])],
+			handoffs,
 			body: PlanAgentProvider.buildAgentBody(autoHandoff),
 			...(modelOverride ? { model: modelOverride } : {}),
 		};
+
+		this.logService.info(
+			`[PlanAgentProvider] buildCustomizedConfig: final tools=[${tools.join(', ')}], ` +
+			`handoffs=[${handoffs.map(h => `${h.label}→${h.agent}`).join(', ')}], ` +
+			`hasStartImplementationTool=${tools.includes('vscode/startImplementation')}, ` +
+			`model=${finalConfig.model ?? '(default)'}`
+		);
+
+		return finalConfig;
 	}
 }

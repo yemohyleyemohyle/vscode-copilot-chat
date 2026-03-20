@@ -110,91 +110,23 @@ suite('StartImplementationTool', () => {
 		} as any;
 		const fakeToken = {} as any;
 
-		test('calls toggleAgentMode without model when no implement model is configured', async () => {
+		test('does not call toggleAgentMode or changeModel — deferred chat.open handles mode+model', async () => {
+			vi.useFakeTimers();
 			await tool.invoke(fakeOptions, fakeToken);
 
-			const toggleCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.toggleAgentMode');
-			assert.equal(toggleCalls.length, 1);
-			assert.deepStrictEqual(toggleCalls[0][1], {
-				modeId: 'agent',
-				sessionResource: fakeOptions.chatSessionResource,
-			});
+			const allCommands = executeCommandSpy.mock.calls.map((c: any) => c[0]);
+			assert.notInclude(allCommands, 'workbench.action.chat.toggleAgentMode');
+			assert.notInclude(allCommands, 'workbench.action.chat.changeModel');
+			// chat.open is deferred, not called synchronously
+			assert.notInclude(allCommands, 'workbench.action.chat.open');
 		});
 
-		test('passes model in toggleAgentMode and calls changeModel when implement model is configured', async () => {
-			getConfigurationSpy.mockReturnValue({
-				get: () => 'claude-opus-4.6',
-			} as any);
-
-			selectChatModelsSpy.mockImplementation(async (selector: { id?: string }) => {
-				if (selector.id === 'claude-opus-4.6') {
-					return [{ vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' }];
-				}
-				return [];
-			});
-
+		test('no synchronous vscode commands are called during invoke', async () => {
+			vi.useFakeTimers();
 			await tool.invoke(fakeOptions, fakeToken);
 
-			const toggleCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.toggleAgentMode');
-			assert.equal(toggleCalls.length, 1);
-			assert.deepStrictEqual(toggleCalls[0][1], {
-				modeId: 'agent',
-				sessionResource: fakeOptions.chatSessionResource,
-				model: { vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' },
-			});
-
-			const changeModelCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.changeModel');
-			assert.equal(changeModelCalls.length, 1);
-			assert.deepStrictEqual(changeModelCalls[0][1], {
-				vendor: 'copilot',
-				id: 'claude-opus-4.6',
-				family: 'claude-opus',
-			});
-		});
-
-		test('does not call changeModel when model resolution fails', async () => {
-			getConfigurationSpy.mockReturnValue({
-				get: () => 'nonexistent-model',
-			} as any);
-
-			selectChatModelsSpy.mockResolvedValue([] as any);
-
-			await tool.invoke(fakeOptions, fakeToken);
-
-			const toggleCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.toggleAgentMode');
-			const changeModelCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.changeModel');
-			assert.equal(toggleCalls.length, 1);
-			assert.equal(changeModelCalls.length, 0);
-		});
-
-		test('calls toggleAgentMode before changeModel (correct order)', async () => {
-			const callOrder: string[] = [];
-			executeCommandSpy.mockImplementation(async (command: string) => {
-				callOrder.push(command);
-			});
-
-			getConfigurationSpy.mockReturnValue({
-				get: () => 'claude-opus-4.6',
-			} as any);
-
-			selectChatModelsSpy.mockResolvedValue([
-				{ vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' },
-			] as any);
-
-			await tool.invoke(fakeOptions, fakeToken);
-
-			assert.deepStrictEqual(callOrder, [
-				'workbench.action.chat.toggleAgentMode',
-				'workbench.action.chat.changeModel',
-			]);
-		});
-
-		test('has scheduleDeferredHandoff method for deferred chat.open submission', () => {
-			// The tool uses scheduleDeferredHandoff to submit a deferred chat.open
-			// command after the Plan response completes. This is necessary because
-			// Plan mode uses target: 'vscode' (VS Code core owns the loop), making
-			// the ToolCallingLoop._runLoop() follow-up injection dead code.
-			assert.equal(typeof (tool as any).scheduleDeferredHandoff, 'function');
+			// Only the deferred setTimeout is scheduled; no executeCommand calls during invoke
+			assert.equal(executeCommandSpy.mock.calls.length, 0);
 		});
 
 		test('returns tool result that tells planner to conclude', async () => {
@@ -209,83 +141,341 @@ suite('StartImplementationTool', () => {
 			}
 		});
 
-		test('invoke only calls toggleAgentMode and changeModel synchronously — chat.open is deferred', async () => {
-			getConfigurationSpy.mockReturnValue({
-				get: () => 'claude-opus-4.6',
-			} as any);
+		test('tool result does not mention mode switching (no toggleAgentMode)', async () => {
+			const result = await tool.invoke(fakeOptions, fakeToken);
+			const content = (result as any).content ?? (result as any)._content;
+			if (content) {
+				const text: string = content[0]?.value ?? content[0]?.text ?? '';
+				assert.notInclude(text.toLowerCase(), 'switched to agent');
+			}
+		});
+	});
 
-			selectChatModelsSpy.mockResolvedValue([
-				{ vendor: 'copilot', id: 'claude-opus-4.6', family: 'claude-opus' },
-			] as any);
+	suite('discoverHandoff', () => {
+		test('returns matched handoff when getHandoffs succeeds', async () => {
+			executeCommandSpy.mockImplementation(async (cmd: string) => {
+				if (cmd === 'workbench.action.chat.getHandoffs') {
+					return {
+						result: [{
+							id: 'plan',
+							name: 'Plan',
+							handoffs: [
+								{
+									id: 'agent:start-implementation',
+									label: 'Start Implementation',
+									agent: 'agent',
+									prompt: 'Here is the detailed plan summary...',
+								},
+								{
+									id: 'explore:analyze',
+									label: 'Explore',
+									agent: 'explore',
+									prompt: 'Explore something...',
+								},
+							],
+						}],
+					};
+				}
+				return undefined;
+			});
 
-			vi.useFakeTimers();
-			await tool.invoke(fakeOptions, fakeToken);
-
-			// Synchronous commands: only toggleAgentMode and changeModel
-			const allCommands = executeCommandSpy.mock.calls.map((c: any) => c[0]);
-			assert.notInclude(allCommands, 'type');
-			assert.notInclude(allCommands, 'workbench.action.chat.submit');
-			assert.notInclude(allCommands, 'workbench.panel.chat.view.copilot.focus');
-			assert.notInclude(allCommands, 'editor.action.selectAll');
-			// chat.open is NOT called synchronously — it's deferred via setTimeout
-			assert.notInclude(allCommands, 'workbench.action.chat.open');
+			const handoff = await tool.discoverHandoff();
+			assert.ok(handoff);
+			assert.equal(handoff!.id, 'agent:start-implementation');
+			assert.equal(handoff!.agent, 'agent');
+			assert.equal(handoff!.prompt, 'Here is the detailed plan summary...');
 		});
 
-		test('deferred handoff calls chat.open after timeout fires', async () => {
+		test('returns undefined when getHandoffs returns no result', async () => {
+			executeCommandSpy.mockResolvedValue(undefined as any);
+
+			const handoff = await tool.discoverHandoff();
+			assert.equal(handoff, undefined);
+		});
+
+		test('returns undefined when getHandoffs returns empty result array', async () => {
+			executeCommandSpy.mockResolvedValue({ result: [] } as any);
+
+			const handoff = await tool.discoverHandoff();
+			assert.equal(handoff, undefined);
+		});
+
+		test('returns undefined when handoff ID is not found in response', async () => {
+			executeCommandSpy.mockImplementation(async (cmd: string) => {
+				if (cmd === 'workbench.action.chat.getHandoffs') {
+					return {
+						result: [{
+							id: 'plan',
+							name: 'Plan',
+							handoffs: [{
+								id: 'explore:something-else',
+								label: 'Other',
+								agent: 'explore',
+								prompt: 'Other prompt...',
+							}],
+						}],
+					};
+				}
+				return undefined;
+			});
+
+			const handoff = await tool.discoverHandoff();
+			assert.equal(handoff, undefined);
+		});
+
+		test('returns undefined when getHandoffs throws', async () => {
+			executeCommandSpy.mockRejectedValue(new Error('Command not found'));
+
+			const handoff = await tool.discoverHandoff();
+			assert.equal(handoff, undefined);
+		});
+
+		test('calls getHandoffs with correct sourceCustomAgent', async () => {
+			executeCommandSpy.mockResolvedValue({ result: [] } as any);
+
+			await tool.discoverHandoff();
+
+			const getHandoffsCalls = executeCommandSpy.mock.calls.filter(
+				(c: any) => c[0] === 'workbench.action.chat.getHandoffs'
+			);
+			assert.equal(getHandoffsCalls.length, 1);
+			assert.deepStrictEqual(getHandoffsCalls[0][1], {
+				sourceCustomAgent: StartImplementationTool.SOURCE_CHAT_MODE,
+			});
+		});
+
+		test('searches across multiple agents in response for the handoff', async () => {
+			executeCommandSpy.mockImplementation(async (cmd: string) => {
+				if (cmd === 'workbench.action.chat.getHandoffs') {
+					return {
+						result: [
+							{
+								id: 'explore',
+								name: 'Explore',
+								handoffs: [{ id: 'explore:other', label: 'Other', agent: 'explore', prompt: 'explore...' }],
+							},
+							{
+								id: 'agent',
+								name: 'Agent',
+								handoffs: [{ id: 'agent:start-implementation', label: 'Start', agent: 'agent', prompt: 'dynamic plan' }],
+							},
+						],
+					};
+				}
+				return undefined;
+			});
+
+			const handoff = await tool.discoverHandoff();
+			assert.ok(handoff);
+			assert.equal(handoff!.id, 'agent:start-implementation');
+			assert.equal(handoff!.prompt, 'dynamic plan');
+		});
+	});
+
+	suite('scheduleDeferredHandoff', () => {
+		test('calls getHandoffs then chat.open with dynamic prompt after timeout', async () => {
 			vi.useFakeTimers();
-			await tool.invoke(fakeOptions, fakeToken);
 
-			// Before timeout: no chat.open call
-			const chatOpenBefore = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.open');
-			assert.equal(chatOpenBefore.length, 0);
+			executeCommandSpy.mockImplementation(async (cmd: string) => {
+				if (cmd === 'workbench.action.chat.getHandoffs') {
+					return {
+						result: [{
+							id: 'plan',
+							name: 'Plan',
+							handoffs: [{
+								id: 'agent:start-implementation',
+								label: 'Start Implementation',
+								agent: 'agent',
+								prompt: 'Dynamic plan summary from core',
+							}],
+						}],
+					};
+				}
+				return undefined;
+			});
 
-			// Advance timers to trigger the deferred handoff
+			tool.scheduleDeferredHandoff();
+
+			// Before timeout: nothing called
+			assert.equal(executeCommandSpy.mock.calls.length, 0);
+
 			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS);
 
-			// After timeout: chat.open should have been called
-			const chatOpenAfter = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.open');
-			assert.equal(chatOpenAfter.length, 1);
-			assert.deepStrictEqual(chatOpenAfter[0][1], {
-				query: 'Start implementation. Read the plan from /memories/session/plan.md and execute it.',
+			// After timeout: getHandoffs called first, then chat.open
+			const getHandoffsCalls = executeCommandSpy.mock.calls.filter(
+				(c: any) => c[0] === 'workbench.action.chat.getHandoffs'
+			);
+			assert.equal(getHandoffsCalls.length, 1);
+
+			const chatOpenCalls = executeCommandSpy.mock.calls.filter(
+				(c: any) => c[0] === 'workbench.action.chat.open'
+			);
+			assert.equal(chatOpenCalls.length, 1);
+			assert.deepStrictEqual(chatOpenCalls[0][1], {
+				query: 'Dynamic plan summary from core',
 				mode: 'agent',
 			});
 		});
 
-		test('deferred handoff includes modelSelector when model is configured', async () => {
+		test('falls back to FALLBACK_PROMPT when getHandoffs fails', async () => {
 			vi.useFakeTimers();
 
-			getConfigurationSpy.mockReturnValue({
-				get: () => 'claude-sonnet-4',
-			} as any);
+			executeCommandSpy.mockImplementation(async (cmd: string) => {
+				if (cmd === 'workbench.action.chat.getHandoffs') {
+					throw new Error('Command not available');
+				}
+				return undefined;
+			});
 
-			selectChatModelsSpy.mockResolvedValue([
-				{ vendor: 'copilot', id: 'claude-sonnet-4', family: 'claude-sonnet' },
-			] as any);
-
-			await tool.invoke(fakeOptions, fakeToken);
+			tool.scheduleDeferredHandoff();
 			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS);
 
-			const chatOpenCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.open');
+			const chatOpenCalls = executeCommandSpy.mock.calls.filter(
+				(c: any) => c[0] === 'workbench.action.chat.open'
+			);
 			assert.equal(chatOpenCalls.length, 1);
 			assert.deepStrictEqual(chatOpenCalls[0][1], {
-				query: 'Start implementation. Read the plan from /memories/session/plan.md and execute it.',
+				query: StartImplementationTool.FALLBACK_PROMPT,
+				mode: 'agent',
+			});
+		});
+
+		test('falls back to FALLBACK_PROMPT when handoff ID not found', async () => {
+			vi.useFakeTimers();
+
+			executeCommandSpy.mockImplementation(async (cmd: string) => {
+				if (cmd === 'workbench.action.chat.getHandoffs') {
+					return { result: [{ id: 'plan', name: 'Plan', handoffs: [] }] };
+				}
+				return undefined;
+			});
+
+			tool.scheduleDeferredHandoff();
+			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS);
+
+			const chatOpenCalls = executeCommandSpy.mock.calls.filter(
+				(c: any) => c[0] === 'workbench.action.chat.open'
+			);
+			assert.equal(chatOpenCalls.length, 1);
+			assert.deepStrictEqual(chatOpenCalls[0][1], {
+				query: StartImplementationTool.FALLBACK_PROMPT,
+				mode: 'agent',
+			});
+		});
+
+		test('includes modelSelector when resolvedModel is provided', async () => {
+			vi.useFakeTimers();
+
+			executeCommandSpy.mockImplementation(async (cmd: string) => {
+				if (cmd === 'workbench.action.chat.getHandoffs') {
+					return {
+						result: [{
+							id: 'plan',
+							name: 'Plan',
+							handoffs: [{
+								id: 'agent:start-implementation',
+								label: 'Start',
+								agent: 'agent',
+								prompt: 'Plan summary',
+							}],
+						}],
+					};
+				}
+				return undefined;
+			});
+
+			const model = { vendor: 'copilot', id: 'claude-sonnet-4', family: 'claude-sonnet' };
+			tool.scheduleDeferredHandoff(model);
+			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS);
+
+			const chatOpenCalls = executeCommandSpy.mock.calls.filter(
+				(c: any) => c[0] === 'workbench.action.chat.open'
+			);
+			assert.equal(chatOpenCalls.length, 1);
+			assert.deepStrictEqual(chatOpenCalls[0][1], {
+				query: 'Plan summary',
 				mode: 'agent',
 				modelSelector: { id: 'claude-sonnet-4', vendor: 'copilot' },
 			});
 		});
 
-		test('deferred handoff does not include modelSelector when no model configured', async () => {
+		test('does not include modelSelector when resolvedModel is undefined', async () => {
 			vi.useFakeTimers();
-			await tool.invoke(fakeOptions, fakeToken);
+
+			executeCommandSpy.mockImplementation(async (cmd: string) => {
+				if (cmd === 'workbench.action.chat.getHandoffs') {
+					return {
+						result: [{
+							id: 'plan',
+							name: 'Plan',
+							handoffs: [{
+								id: 'agent:start-implementation',
+								label: 'Start',
+								agent: 'agent',
+								prompt: 'Plan summary',
+							}],
+						}],
+					};
+				}
+				return undefined;
+			});
+
+			tool.scheduleDeferredHandoff();
 			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS);
 
-			const chatOpenCalls = executeCommandSpy.mock.calls.filter((c: any) => c[0] === 'workbench.action.chat.open');
+			const chatOpenCalls = executeCommandSpy.mock.calls.filter(
+				(c: any) => c[0] === 'workbench.action.chat.open'
+			);
 			assert.equal(chatOpenCalls.length, 1);
 			// No modelSelector property
 			assert.deepStrictEqual(chatOpenCalls[0][1], {
-				query: 'Start implementation. Read the plan from /memories/session/plan.md and execute it.',
+				query: 'Plan summary',
 				mode: 'agent',
 			});
+		});
+
+		test('uses handoff.agent as mode (not hardcoded "agent")', async () => {
+			vi.useFakeTimers();
+
+			executeCommandSpy.mockImplementation(async (cmd: string) => {
+				if (cmd === 'workbench.action.chat.getHandoffs') {
+					return {
+						result: [{
+							id: 'plan',
+							name: 'Plan',
+							handoffs: [{
+								id: 'agent:start-implementation',
+								label: 'Start',
+								agent: 'custom-agent-mode',
+								prompt: 'Plan summary',
+							}],
+						}],
+					};
+				}
+				return undefined;
+			});
+
+			tool.scheduleDeferredHandoff();
+			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS);
+
+			const chatOpenCalls = executeCommandSpy.mock.calls.filter(
+				(c: any) => c[0] === 'workbench.action.chat.open'
+			);
+			assert.equal(chatOpenCalls.length, 1);
+			assert.equal(chatOpenCalls[0][1].mode, 'custom-agent-mode');
+		});
+
+		test('deferred handoff does not fire before HANDOFF_DELAY_MS', async () => {
+			vi.useFakeTimers();
+			executeCommandSpy.mockResolvedValue(undefined as any);
+
+			tool.scheduleDeferredHandoff();
+
+			// Advance by less than the delay
+			await vi.advanceTimersByTimeAsync(StartImplementationTool.HANDOFF_DELAY_MS - 100);
+
+			// No commands should have been called yet
+			assert.equal(executeCommandSpy.mock.calls.length, 0);
 		});
 	});
 });

@@ -28,16 +28,33 @@ interface IStartImplementationParams {
  * never executes for Plan mode, so the in-loop follow-up injection
  * (`_followUpQuery` at ~line 930 of toolCallingLoop.ts) is dead code for this flow.
  *
- * To work around this, after toggling the mode and model, this tool schedules a
- * **deferred `chat.open` command** via `setTimeout` that submits the implementation
- * prompt to Agent mode after the Plan response completes.
+ * Instead, this tool schedules a **deferred handoff** via `setTimeout` that uses
+ * VS Code core's `getHandoffs` API to discover the "Start Implementation" handoff
+ * and execute it via `chat.open`. This mirrors the eval harness's
+ * `executeHandoffAndWait` flow. The `chat.open` command handles mode switching,
+ * model selection, and prompt submission in one call — no `toggleAgentMode` or
+ * `changeModel` needed.
  */
 export class StartImplementationTool implements ICopilotTool<IStartImplementationParams> {
 	public static readonly toolName = ToolName.StartImplementation;
 
+	/** The handoff ID for the "Start Implementation" button declared in Plan's .agent.md */
+	static readonly HANDOFF_ID = 'agent:start-implementation';
+
+	/** The source mode for handoff discovery */
+	static readonly SOURCE_CHAT_MODE = 'plan';
+
+	/**
+	 * Fallback prompt used when `getHandoffs` fails or the handoff entry cannot be found.
+	 * In the happy path, the prompt comes from core's dynamically-generated plan summary.
+	 */
+	static readonly FALLBACK_PROMPT = 'Start implementation. Read the plan from /memories/session/plan.md and execute it.';
+
 	constructor(
 		@ILogService private readonly logService: ILogService,
-	) { }
+	) {
+		this.logService.info('[StartImplementationTool] constructor: tool instance created and registered with VS Code');
+	}
 
 	/**
 	 * If the `implementAgent.model` setting is configured, resolve the corresponding
@@ -81,49 +98,32 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 		return undefined;
 	}
 
-	async invoke(options: vscode.LanguageModelToolInvocationOptions<IStartImplementationParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
+	async invoke(_options: vscode.LanguageModelToolInvocationOptions<IStartImplementationParams>, _token: CancellationToken): Promise<vscode.LanguageModelToolResult> {
 		this.logService.info('[StartImplementationTool] invoke: entry');
 
-		// Resolve the implement agent model before switching modes
+		// Resolve the implement agent model for the deferred handoff's modelSelector
 		const resolvedModel = await this.resolveImplementModel();
 		this.logService.info(`[StartImplementationTool] invoke: resolvedModel = ${resolvedModel ? JSON.stringify(resolvedModel) : 'undefined'}`);
 
-		// Switch to agent mode within the current session.
-		// NOTE: toggleAgentMode only supports { modeId, sessionResource, model }.
-		const toggleArgs = {
-			modeId: 'agent',
-			sessionResource: options.chatSessionResource,
-			...(resolvedModel ? { model: resolvedModel } : {}),
-		};
-		this.logService.info(`[StartImplementationTool] invoke: calling toggleAgentMode with args = ${JSON.stringify(toggleArgs)}`);
-		await vscode.commands.executeCommand('workbench.action.chat.toggleAgentMode', toggleArgs);
-		this.logService.info('[StartImplementationTool] invoke: toggleAgentMode completed');
-
-		// Explicitly switch the model AFTER the mode transition as a belt-and-suspenders
-		// fallback. The model is already passed in toggleArgs, but changeModel ensures
-		// the model picker UI also reflects the selection for any subsequent requests.
-		if (resolvedModel) {
-			this.logService.info(`[StartImplementationTool] invoke: calling changeModel with ${JSON.stringify(resolvedModel)}`);
-			await vscode.commands.executeCommand('workbench.action.chat.changeModel', resolvedModel);
-			this.logService.info('[StartImplementationTool] invoke: changeModel completed');
-		} else {
-			this.logService.info('[StartImplementationTool] invoke: no model override, skipping changeModel');
-		}
-
-		// Schedule a deferred chat.open to submit the implementation prompt.
+		// Schedule a deferred handoff that uses VS Code core's getHandoffs API.
 		//
 		// Plan mode uses `target: 'vscode'`, so VS Code core owns the tool calling loop.
 		// The extension's ToolCallingLoop._runLoop() never executes for Plan mode, making
 		// the in-loop follow-up injection (~line 930 of toolCallingLoop.ts) dead code.
-		// We schedule a deferred chat.open command that fires after the Plan response
-		// completes, submitting the implementation prompt to Agent mode in the same session.
+		//
+		// The deferred handoff:
+		// 1. Calls getHandoffs({ sourceCustomAgent: 'plan' }) to discover the "Start
+		//    Implementation" handoff and its dynamically-generated plan summary prompt
+		// 2. Calls chat.open(query=handoff.prompt, mode='agent', modelSelector) to
+		//    execute the handoff — this handles mode switch, model, and prompt in one call
+		// 3. Falls back to a generic prompt if getHandoffs fails
 		this.scheduleDeferredHandoff(resolvedModel);
 
 		// Return a result that concludes the planning turn.
 		this.logService.info('[StartImplementationTool] invoke: returning tool result (deferred handoff scheduled)');
 		return new LanguageModelToolResult([
 			new LanguageModelTextPart(
-				'Planning phase completed successfully. The session mode has been switched to Agent for implementation. ' +
+				'Planning phase completed successfully. ' +
 				'Summarize the plan briefly and conclude this planning response. ' +
 				'The system will automatically submit a follow-up implementation request.'
 			)
@@ -131,6 +131,7 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 	}
 
 	prepareInvocation(_options: vscode.LanguageModelToolInvocationPrepareOptions<IStartImplementationParams>, _token: vscode.CancellationToken): vscode.ProviderResult<vscode.PreparedToolInvocation> {
+		this.logService.info('[StartImplementationTool] prepareInvocation: VS Code core is about to invoke the tool (model requested it)');
 		return {
 			invocationMessage: new MarkdownString(vscode.l10n.t('Starting implementation...')),
 			pastTenseMessage: new MarkdownString(vscode.l10n.t('Started implementation')),
@@ -146,33 +147,88 @@ export class StartImplementationTool implements ICopilotTool<IStartImplementatio
 	static readonly HANDOFF_DELAY_MS = 5000;
 
 	/**
-	 * Schedule a deferred `workbench.action.chat.open` command to submit the
-	 * implementation prompt after the Plan response completes.
+	 * Schedule a deferred handoff that uses VS Code core's `getHandoffs` API
+	 * to discover the "Start Implementation" handoff, extract the dynamically-
+	 * generated plan summary prompt, and execute it via `chat.open`.
 	 *
-	 * Plan mode uses `target: 'vscode'`, so VS Code core owns the tool calling loop.
-	 * After this tool returns, core sends the result to the model, the model produces
-	 * a brief summary, and the response completes. We use a delay to ensure the
-	 * response has finished before submitting the follow-up.
+	 * This mirrors the eval harness's `executeHandoffAndWait` flow:
+	 * 1. `getHandoffs({ sourceCustomAgent: 'plan' })` → discover available handoffs
+	 * 2. Find the handoff with id `agent:start-implementation`
+	 * 3. `chat.open({ query: handoff.prompt, mode: handoff.agent, modelSelector })`
+	 *
+	 * Falls back to {@link FALLBACK_PROMPT} if `getHandoffs` fails or the
+	 * handoff entry cannot be found.
 	 */
 	scheduleDeferredHandoff(resolvedModel?: { vendor: string; id: string; family: string }): void {
 		this.logService.info(`[StartImplementationTool] Scheduling deferred handoff in ${StartImplementationTool.HANDOFF_DELAY_MS}ms`);
 
 		setTimeout(async () => {
 			try {
-				this.logService.info('[StartImplementationTool] Submitting deferred implementation request via chat.open');
+				// Try to discover the handoff via core's getHandoffs API.
+				// This may return a dynamically-generated plan summary as the prompt.
+				const handoff = await this.discoverHandoff();
+
+				const prompt = handoff?.prompt || StartImplementationTool.FALLBACK_PROMPT;
+				const targetMode = handoff?.agent || 'agent';
+
+				this.logService.info(`[StartImplementationTool] Submitting deferred handoff: mode=${targetMode}, prompt=${prompt.substring(0, 100)}..., usedGetHandoffs=${!!handoff}`);
+
 				const chatOpenArgs: Record<string, unknown> = {
-					query: 'Start implementation. Read the plan from /memories/session/plan.md and execute it.',
-					mode: 'agent',
+					query: prompt,
+					mode: targetMode,
 				};
 				if (resolvedModel) {
 					chatOpenArgs.modelSelector = { id: resolvedModel.id, vendor: resolvedModel.vendor };
 				}
 				await vscode.commands.executeCommand('workbench.action.chat.open', chatOpenArgs);
-				this.logService.info('[StartImplementationTool] Deferred implementation request submitted successfully');
+				this.logService.info('[StartImplementationTool] Deferred handoff submitted successfully');
 			} catch (e) {
-				this.logService.error(`[StartImplementationTool] Failed to submit deferred implementation request: ${e}`);
+				this.logService.error(`[StartImplementationTool] Failed to submit deferred handoff: ${e}`);
 			}
 		}, StartImplementationTool.HANDOFF_DELAY_MS);
+	}
+
+	/**
+	 * Discover the "Start Implementation" handoff from VS Code core using the
+	 * `workbench.action.chat.getHandoffs` command.
+	 *
+	 * @returns The matched handoff entry `{ id, label, agent, prompt }`, or
+	 *          `undefined` if the command fails or no match is found.
+	 */
+	async discoverHandoff(): Promise<{ id: string; label: string; agent: string; prompt: string } | undefined> {
+		try {
+			this.logService.info(`[StartImplementationTool] Calling getHandoffs for source='${StartImplementationTool.SOURCE_CHAT_MODE}'`);
+			const response = await vscode.commands.executeCommand(
+				'workbench.action.chat.getHandoffs',
+				{ sourceCustomAgent: StartImplementationTool.SOURCE_CHAT_MODE }
+			) as {
+				result?: Array<{
+					id: string;
+					name: string;
+					handoffs: Array<{ id: string; label: string; agent: string; prompt: string }>;
+				}>;
+			} | undefined;
+
+			if (!response?.result) {
+				this.logService.warn('[StartImplementationTool] getHandoffs returned no result');
+				return undefined;
+			}
+
+			const allHandoffs = response.result.flatMap(a => a.handoffs);
+			this.logService.info(`[StartImplementationTool] getHandoffs returned ${allHandoffs.length} handoff(s): ${allHandoffs.map(h => h.id).join(', ')}`);
+
+			const matched = allHandoffs.find(h => h.id === StartImplementationTool.HANDOFF_ID);
+			if (!matched) {
+				this.logService.warn(`[StartImplementationTool] Handoff '${StartImplementationTool.HANDOFF_ID}' not found in getHandoffs response`);
+				return undefined;
+			}
+
+			this.logService.info(`[StartImplementationTool] Matched handoff: id=${matched.id}, agent=${matched.agent}, prompt=${matched.prompt.substring(0, 100)}...`);
+			return matched;
+		} catch (e) {
+			this.logService.warn(`[StartImplementationTool] getHandoffs failed, will use fallback prompt: ${e}`);
+			return undefined;
+		}
 	}
 }
 

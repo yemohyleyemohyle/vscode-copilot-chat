@@ -33,11 +33,17 @@ export class ToolsContribution extends Disposable {
 	) {
 		super();
 
+		const registeredToolNames: string[] = [];
 		for (const [name, tool] of toolsService.copilotTools) {
 			if (isVscodeLanguageModelTool(tool)) {
-				this._register(vscode.lm.registerTool(getContributedToolName(name), tool));
+				const contributedName = getContributedToolName(name);
+				this._register(vscode.lm.registerTool(contributedName, tool));
+				registeredToolNames.push(contributedName);
 			}
 		}
+		// Log all registered tools to help debug tool availability issues
+		// (e.g. Plan agent not seeing startImplementation)
+		console.log(`[ToolsContribution] Registered ${registeredToolNames.length} copilot tools with vscode.lm: [${registeredToolNames.join(', ')}]`);
 
 		const modelSpecificTools = this._register(new DisposableMap<string>());
 		this._register(autorunIterableDelta(
