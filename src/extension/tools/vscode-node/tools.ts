@@ -9,6 +9,7 @@ import { ConfigKey, IConfigurationService } from '../../../platform/configuratio
 import { IVSCodeExtensionContext } from '../../../platform/extContext/common/extensionContext';
 import { IFileSystemService } from '../../../platform/filesystem/common/fileSystemService';
 import { FileType } from '../../../platform/filesystem/common/fileTypes';
+import { ILogService } from '../../../platform/log/common/logService';
 import { IExperimentationService } from '../../../platform/telemetry/common/nullExperimentationService';
 import { Disposable, DisposableMap } from '../../../util/vs/base/common/lifecycle';
 import { autorun, autorunIterableDelta } from '../../../util/vs/base/common/observableInternal';
@@ -30,6 +31,7 @@ export class ToolsContribution extends Disposable {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IExperimentationService private readonly experimentationService: IExperimentationService,
 		@IFileSystemService private readonly fileSystemService: IFileSystemService,
+		@ILogService private readonly logService: ILogService,
 	) {
 		super();
 
@@ -44,7 +46,7 @@ export class ToolsContribution extends Disposable {
 		// Log all registered tools to help debug tool availability issues
 		// (e.g. Plan agent not seeing startImplementation)
 		// Note: these are the names VS Code core uses to match .agent.md tool references
-		console.log(`[ToolsContribution] Registered ${registeredToolNames.length} copilot tools with vscode.lm: [${registeredToolNames.join(', ')}]`);
+		this.logService.info(`[ToolsContribution] Registered ${registeredToolNames.length} copilot tools with vscode.lm: [${registeredToolNames.join(', ')}]`);
 
 		const modelSpecificTools = this._register(new DisposableMap<string>());
 		this._register(autorunIterableDelta(

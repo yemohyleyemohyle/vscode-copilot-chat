@@ -315,12 +315,15 @@ Rules:
 		// Collect tools to add
 		const toolsToAdd: string[] = [...additionalTools];
 
-		if (autoHandoff) {
-			// In auto-handoff mode, add the startImplementation tool
-			// and skip askQuestions (no user to answer)
-			toolsToAdd.push('vscode/startImplementation');
-		} else {
-			// Always include askQuestions tool in interactive mode (now provided by core)
+		// Always include startImplementation in the tools list to avoid a timing race:
+		// VS Code core calls provideCustomAgents() before eval harness settings are applied,
+		// locking the session's tool list without startImplementation. By always including it,
+		// the tool is available from the first provideCustomAgents call. The body text controls
+		// whether the model actually calls it (auto-handoff body instructs it; interactive doesn't).
+		toolsToAdd.push('vscode/startImplementation');
+
+		if (!autoHandoff) {
+			// In interactive mode, also include askQuestions (no user to answer in auto-handoff)
 			toolsToAdd.push('vscode/askQuestions');
 		}
 
