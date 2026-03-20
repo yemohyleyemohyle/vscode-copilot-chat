@@ -282,11 +282,14 @@ Rules:
 		);
 
 		// Build handoffs dynamically with model override
+		// Note: Start Implementation does NOT have send: true — the startImplementation tool
+		// handles the transition via its deferred chat.open. Having send: true would cause
+		// VS Code core to auto-send "Start implementation" AND the tool to fire its own
+		// chat.open, resulting in duplicate implementation requests.
 		const startImplementationHandoff: AgentHandoff = {
 			label: 'Start Implementation',
 			agent: 'agent',
 			prompt: 'Start implementation',
-			send: true,
 			...(implementAgentModelOverride ? { model: implementAgentModelOverride } : {})
 		};
 
