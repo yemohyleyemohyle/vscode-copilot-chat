@@ -143,12 +143,12 @@ export class ToolsService extends BaseToolsService {
 			} catch { /* swallow serialization errors */ }
 		}
 
-		// For runSubagent tool, store this execute_tool span's trace context so the subagent's
+		// For subagent tools, store this execute_tool span's trace context so the subagent's
 		// invoke_agent span can be parented to THIS tool call (not the grandparent invoke_agent).
 		const chatStreamToolCallId = (options as { chatStreamToolCallId?: string }).chatStreamToolCallId;
 		const chatRequestId = (options as { chatRequestId?: string }).chatRequestId;
 		const subAgentInvocationId = (options as { subAgentInvocationId?: string }).subAgentInvocationId;
-		if (String(name) === 'runSubagent') {
+		if (subAgentInvocationId) {
 			const traceCtx = span.getSpanContext();
 			if (traceCtx) {
 				if (chatStreamToolCallId) {
