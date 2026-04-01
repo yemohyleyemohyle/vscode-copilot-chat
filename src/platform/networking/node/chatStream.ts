@@ -275,7 +275,7 @@ function sendNewRequestAddedTelemetry(telemetryService: ITelemetryService, telem
 	const requestData = TelemetryData.createAndMarkAsIssued(filteredProperties, telemetryData.measurements);
 
 	telemetryService.sendInternalMSFTTelemetryEvent('model.request.added', requestData.properties, requestData.measurements);
-	logService?.debug(`[TELEMETRY] model.request.added properties=${JSON.stringify(requestData.properties)} measurements=${JSON.stringify(requestData.measurements)}`);
+	logService?.info(`[TELEMETRY] model.request.added properties=${JSON.stringify(requestData.properties)} measurements=${JSON.stringify(requestData.measurements)}`);
 }
 
 function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, messages: CAPIChatMessage[], telemetryData: TelemetryData, messageDirection: 'input' | 'output', logService?: ILogService): Array<{ uuid: string; headerRequestId: string }> {
@@ -407,7 +407,7 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 
 			telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);
 			if (messageDirection === 'input') {
-				logService?.debug(`[TELEMETRY] model.modelCall.input properties=${JSON.stringify(modelCallData.properties)} measurements=${JSON.stringify(modelCallData.measurements)}`);
+				logService?.info(`[TELEMETRY] model.modelCall.input properties=${JSON.stringify(modelCallData.properties)} measurements=${JSON.stringify(modelCallData.measurements)}`);
 			}
 		}
 	}
@@ -450,7 +450,7 @@ export function sendEngineMessagesTelemetry(telemetryService: ITelemetryService,
 		messagesJson: JSON.stringify(messages),
 	});
 	telemetryService.sendEnhancedGHTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
-	logService?.debug(`[TELEMETRY] engine.messages properties=${JSON.stringify(telemetryDataWithPrompt.properties)} measurements=${JSON.stringify(telemetryDataWithPrompt.measurements)}`);
+	logService?.info(`[TELEMETRY] engine.messages properties=${JSON.stringify(telemetryDataWithPrompt.properties)} measurements=${JSON.stringify(telemetryDataWithPrompt.measurements)}`);
 	// Commenting this out to test a new deduplicated way to collect the same information using sendModelTelemetryEvents()
 	// TO DO remove this line completely if the new way allows for complete reconstruction of entire message arrays with much lower drop rate
 	//telemetryService.sendInternalMSFTTelemetryEvent('engine.messages', multiplexProperties(telemetryDataWithPrompt.properties), telemetryDataWithPrompt.measurements);
