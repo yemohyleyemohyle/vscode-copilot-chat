@@ -963,6 +963,14 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 			// WebSocket path: use persistent WebSocket connection for Responses API endpoints
 			if (useWebSocket && turnId && conversationId) {
+				// Log last 3 assistant/tool items from the actual request body to verify model input is not disturbed
+				const wsInput = (request as any).input as any[] | undefined;
+				if (wsInput) {
+					const tail = wsInput.filter((i: any) => i.role !== 'system' && i.role !== 'user' && i.role !== 'developer').slice(-3);
+					for (const item of tail) {
+						this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} inputItem: ${JSON.stringify(item).substring(0, 2000)}`);
+					}
+				}
 				const wsResult = await this._doFetchViaWebSocket(
 					chatEndpointInfo,
 					request,
@@ -981,6 +989,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				return { ...wsResult, otelSpan };
 			}
 
+			// Log last 3 assistant/tool messages from the actual request body to verify model input is not disturbed
+			if (request.messages) {
+				const tail = request.messages.filter((m: any) => m.role !== 'system' && m.role !== 'user').slice(-3);
+				for (const msg of tail) {
+					this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} message: ${JSON.stringify(msg).substring(0, 2000)}`);
+				}
+			}
 			const httpResult = await this._doFetchViaHttp(
 				chatEndpointInfo,
 				request,

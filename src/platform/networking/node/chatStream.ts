@@ -409,6 +409,10 @@ function sendModelCallTelemetry(telemetryService: ITelemetryService, messageData
 			}, telemetryData.measurements); // Include measurements from original telemetryData
 
 			telemetryService.sendInternalMSFTTelemetryEvent(eventName, modelCallData.properties, modelCallData.measurements);
+
+			if (logService) {
+				logService.info(`[${eventName}] modelCallId=${modelCallId} headerRequestId=${headerRequestId} messageUuids=${chunks[chunkIndex]} chunk=${chunkIndex + 1}/${chunks.length}`);
+			}
 		}
 	}
 }

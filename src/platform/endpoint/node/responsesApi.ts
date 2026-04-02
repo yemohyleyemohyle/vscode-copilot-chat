@@ -318,7 +318,8 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 					});
 					break;
 				case 'assistant':
-					flushPendingAssistant();
+					// Don't flush — merge into the current pending assistant turn
+					// so reasoning + content + tool_calls stay in one message
 					if (isResponseOutputMessage(item)) {
 						ensurePendingAssistant().content.push(...item.content.map(responseOutputToRawContent).filter(isDefined));
 					} else if (isResponseInputItemMessage(item)) {
