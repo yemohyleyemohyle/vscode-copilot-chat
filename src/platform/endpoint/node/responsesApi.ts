@@ -217,10 +217,11 @@ function extractThinkingData(content: Raw.ChatCompletionContentPart[]): OpenAI.R
 		if (part.type === Raw.ChatCompletionContentPartKind.Opaque) {
 			const thinkingData = rawPartAsThinkingData(part);
 			if (thinkingData) {
+				const textParts = Array.isArray(thinkingData.text) ? thinkingData.text : (thinkingData.text ? [thinkingData.text] : []);
 				return {
 					type: 'reasoning',
 					id: thinkingData.id,
-					summary: [],
+					summary: textParts.map(t => ({ type: 'summary_text' as const, text: t })),
 					encrypted_content: thinkingData.encrypted,
 				} satisfies OpenAI.Responses.ResponseReasoningItem;
 			}
