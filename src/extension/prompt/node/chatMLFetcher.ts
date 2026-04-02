@@ -153,7 +153,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		const transport = useWebSocket ? 'websocket' : 'http';
 
 		// TODO @lramos15 telemetry should not drive request ids
-		const ourRequestId = telemetryProperties.requestId ?? telemetryProperties.messageId ?? generateUuid();
+		const ourRequestId = telemetryProperties.requestId || telemetryProperties.messageId || generateUuid();
 
 		const maxResponseTokens = chatEndpoint.maxOutputTokens;
 		if (!requestOptions?.prediction) {
@@ -963,8 +963,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 			// WebSocket path: use persistent WebSocket connection for Responses API endpoints
 			if (useWebSocket && turnId && conversationId) {
-				// Log last 3 assistant/tool items from the actual request body to verify model input is not disturbed
+				// Log last 3 non-system/non-user/non-developer items from the actual request body to verify model input is not disturbed
 				const wsInput = (request as any).input as any[] | undefined;
+				this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} transport=websocket totalInputItems=${wsInput?.length ?? 0}`);
 				if (wsInput) {
 					const tail = wsInput.filter((i: any) => i.role !== 'system' && i.role !== 'user' && i.role !== 'developer').slice(-3);
 					for (const item of tail) {
@@ -990,6 +991,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			}
 
 			// Log last 3 assistant/tool messages from the actual request body to verify model input is not disturbed
+			this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} transport=http totalMessages=${request.messages?.length ?? 0}`);
 			if (request.messages) {
 				const tail = request.messages.filter((m: any) => m.role !== 'system' && m.role !== 'user').slice(-3);
 				for (const msg of tail) {
@@ -1176,6 +1178,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						messagesToLog = [];
 					}
 				}
+				this._logService.info(`[DEBUG_HEADER_REQUEST_ID] before sendEngineMessagesTelemetry: headerRequestId=${telemetryData.properties.headerRequestId} ourRequestId=${ourRequestId} modelCallId=${telemetryData.properties.modelCallId}`);
 				sendEngineMessagesTelemetry(this._telemetryService, messagesToLog ?? [], telemetryData, false, this._logService);
 			}
 		});
