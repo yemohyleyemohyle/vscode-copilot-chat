@@ -25,6 +25,7 @@ import { ITelemetryService } from '../../telemetry/common/telemetry';
 import { TelemetryData } from '../../telemetry/common/telemetryData';
 import { getVerbosityForModelSync } from '../common/chatModelCapabilities';
 import { rawPartAsCompactionData } from '../common/compactionDataContainer';
+import { CustomDataPartMimeTypes } from '../common/endpointTypes';
 import { rawPartAsPhaseData } from '../common/phaseDataContainer';
 import { getStatefulMarkerAndIndex } from '../common/statefulMarkerContainer';
 import { rawPartAsThinkingData } from '../common/thinkingDataContainer';
@@ -345,14 +346,19 @@ export function responseApiInputToRawMessagesForLogging(body: OpenAI.Responses.R
 					break;
 				}
 				case 'reasoning':
-					// We can't perfectly reconstruct the original thinking data
-					// but we can add a placeholder for logging
 					flushPendingFunctionCalls();
 					messages.push({
 						role: Raw.ChatRole.Assistant,
 						content: [{
-							type: Raw.ChatCompletionContentPartKind.Text,
-							text: `Reasoning summary: ${item.summary.map(s => s.text).join('\n\n')}`
+							type: Raw.ChatCompletionContentPartKind.Opaque,
+							value: {
+								type: CustomDataPartMimeTypes.ThinkingData,
+								thinking: {
+									id: item.id || 'reasoning',
+									text: item.summary?.map(s => s.text).join('\n\n') ?? '',
+									encrypted: item.encrypted_content,
+								}
+							}
 						}]
 					});
 					break;
