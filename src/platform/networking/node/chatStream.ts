@@ -338,7 +338,7 @@ function sendIndividualMessagesTelemetry(telemetryService: ITelemetryService, me
 			telemetryService.sendInternalMSFTTelemetryEvent('model.message.added', messageData.properties, messageData.measurements);
 
 			if (message.role === 'assistant' && logService) {
-				logService.info(`[model.message.added] direction=${messageDirection} uuid=${messageUuid} headerRequestId=${headerRequestId} chunk=${chunkIndex + 1}/${chunks.length} contentLength=${messageJsonString.length}`);
+				logService.info(`[model.message.added] direction=${messageDirection} uuid=${messageUuid} headerRequestId=${headerRequestId} chunk=${chunkIndex + 1}/${chunks.length} messageJson=${chunks[chunkIndex]}`);
 			}
 		}
 	}
