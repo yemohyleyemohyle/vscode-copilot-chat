@@ -991,11 +991,13 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			}
 
 			// Log last 3 assistant/tool messages from the actual request body to verify model input is not disturbed
-			this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} transport=http totalMessages=${request.messages?.length ?? 0}`);
-			if (request.messages) {
-				const tail = request.messages.filter((m: any) => m.role !== 'system' && m.role !== 'user').slice(-3);
-				for (const msg of tail) {
-					this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} message: ${JSON.stringify(msg).substring(0, 2000)}`);
+			// Supports both Chat Completions API (messages) and Responses API (input)
+			const httpInput = request.messages ?? (request as any).input as any[] | undefined;
+			this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} transport=http totalItems=${httpInput?.length ?? 0}`);
+			if (httpInput) {
+				const tail = httpInput.filter((m: any) => m.role !== 'system' && m.role !== 'user' && m.role !== 'developer').slice(-3);
+				for (const item of tail) {
+					this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} item: ${JSON.stringify(item).substring(0, 2000)}`);
 				}
 			}
 			const httpResult = await this._doFetchViaHttp(
@@ -1178,7 +1180,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 						messagesToLog = [];
 					}
 				}
-				this._logService.info(`[DEBUG_HEADER_REQUEST_ID] before sendEngineMessagesTelemetry: headerRequestId=${telemetryData.properties.headerRequestId} ourRequestId=${ourRequestId} modelCallId=${telemetryData.properties.modelCallId}`);
 				sendEngineMessagesTelemetry(this._telemetryService, messagesToLog ?? [], telemetryData, false, this._logService);
 			}
 		});
@@ -1406,6 +1407,9 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			// If they are different then we will override the original one we set in telemetryData above.
 			const modelRequestId = getRequestId(response.headers);
 			telemetryData.extendWithRequestId(modelRequestId);
+			// extendWithRequestId may overwrite headerRequestId with empty string if the
+			// response header is missing. Restore our known-good request ID.
+			telemetryData.properties['headerRequestId'] = modelRequestId.headerRequestId || ourRequestId;
 
 			// TODO: Add response length (requires parsing)
 			const totalTimeMs = Date.now() - requestStart;
