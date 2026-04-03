@@ -1353,7 +1353,7 @@ export class CopilotCLIChatSessionParticipant extends Disposable {
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
 			} else if (request.command && !request.prompt && !isUntitled) {
 				const input = (copilotCLICommands as readonly string[]).includes(request.command)
-					? { command: request.command as CopilotCLICommand }
+					? { command: request.command as CopilotCLICommand, prompt: '' }
 					: { prompt: `/${request.command}` };
 				await session.object.handleRequest(request, input, [], model, authInfo, token);
 				await this.commitWorktreeChangesIfNeeded(request, session.object, token);
@@ -2266,7 +2266,9 @@ export function registerCLIChatCommands(
 		}
 
 		let branchName: string | undefined;
+		let worktreePath: string | undefined;
 		let baseBranchName: string | undefined;
+		let baseWorktreePath: string | undefined;
 
 		try {
 			const sessionId = SessionIdForCLI.parse(resource);
@@ -2284,12 +2286,14 @@ export function registerCLIChatCommands(
 		}
 
 		const contextValueSegments: string[] = [];
-		contextValueSegments.push('source branch name: ' + branchName);
-		contextValueSegments.push('target branch name: ' + baseBranchName);
+		contextValueSegments.push(`source branch name: ${branchName}`);
+		contextValueSegments.push(`source worktree path: ${worktreePath}`);
+		contextValueSegments.push(`target branch name: ${baseBranchName}`);
+		contextValueSegments.push(`target worktree path: ${baseWorktreePath}`);
 
 		const prompt = syncWithRemote
-			? `${builtinSlashSCommands.mergeChanges} and push changes to remote`
-			: builtinSlashSCommands.mergeChanges;
+			? `${builtinSlashSCommands.merge} and ${builtinSlashSCommands.sync}`
+			: builtinSlashSCommands.merge;
 
 		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
 			resource,
@@ -2393,7 +2397,7 @@ export function registerCLIChatCommands(
 		copilotcliSessionItemProvider.notifySessionsChange();
 	}));
 
-	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.commitChanges', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.commit', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
 		const resource = sessionItemOrResource instanceof vscode.Uri
 			? sessionItemOrResource
 			: sessionItemOrResource?.resource;
@@ -2405,6 +2409,36 @@ export function registerCLIChatCommands(
 		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
 			resource,
 			prompt: builtinSlashSCommands.commit,
+		});
+	}));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.commitAndSync', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		const resource = sessionItemOrResource instanceof vscode.Uri
+			? sessionItemOrResource
+			: sessionItemOrResource?.resource;
+
+		if (!resource) {
+			return;
+		}
+
+		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
+			resource,
+			prompt: `${builtinSlashSCommands.commit} and ${builtinSlashSCommands.sync}`,
+		});
+	}));
+
+	disposableStore.add(vscode.commands.registerCommand('github.copilot.sessions.sync', async (sessionItemOrResource?: vscode.ChatSessionItem | vscode.Uri) => {
+		const resource = sessionItemOrResource instanceof vscode.Uri
+			? sessionItemOrResource
+			: sessionItemOrResource?.resource;
+
+		if (!resource) {
+			return;
+		}
+
+		await vscode.commands.executeCommand('workbench.action.chat.openSessionWithPrompt.copilotcli', {
+			resource,
+			prompt: builtinSlashSCommands.sync,
 		});
 	}));
 
