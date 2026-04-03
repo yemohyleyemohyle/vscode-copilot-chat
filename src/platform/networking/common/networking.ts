@@ -415,6 +415,17 @@ function networkRequest(
 		// pass the controller abort signal to the request
 		request.signal = abort.signal;
 	}
+
+	// Log the raw request payload as it's sent to the model
+	const logService = accessor.get(ILogService);
+	const rawPayload = body.input ?? body.messages ?? [];
+	const payloadItems = Array.isArray(rawPayload) ? rawPayload : [];
+	const payloadTail = payloadItems.filter((m: Record<string, unknown>) => m.role !== 'system' && m.role !== 'user' && m.type !== 'system' && m.type !== 'user').slice(-3);
+	logService.info(`[REQUEST_TO_MODEL] requestId=${requestId} transport=http totalItems=${payloadItems.length} tailCount=${payloadTail.length}`);
+	for (const item of payloadTail) {
+		logService.info(`[REQUEST_TO_MODEL] requestId=${requestId} item: ${JSON.stringify(item).substring(0, 2000)}`);
+	}
+
 	if (typeof endpoint.urlOrRequestMetadata === 'string') {
 		const requestPromise = fetcher.fetch(endpoint.urlOrRequestMetadata, request).catch(reason => {
 			if (canRetryOnce && canRetryOnceNetworkError(reason)) {

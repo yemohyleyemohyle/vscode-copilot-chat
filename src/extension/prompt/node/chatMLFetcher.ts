@@ -963,15 +963,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 
 			// WebSocket path: use persistent WebSocket connection for Responses API endpoints
 			if (useWebSocket && turnId && conversationId) {
-				// Log last 3 non-system/non-user/non-developer items from the actual request body to verify model input is not disturbed
-				const wsInput = (request as any).input as any[] | undefined;
-				this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} transport=websocket totalInputItems=${wsInput?.length ?? 0}`);
-				if (wsInput) {
-					const tail = wsInput.filter((i: any) => i.role !== 'system' && i.role !== 'user' && i.role !== 'developer').slice(-3);
-					for (const item of tail) {
-						this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} inputItem: ${JSON.stringify(item).substring(0, 2000)}`);
-					}
-				}
 				const wsResult = await this._doFetchViaWebSocket(
 					chatEndpointInfo,
 					request,
@@ -990,16 +981,6 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 				return { ...wsResult, otelSpan };
 			}
 
-			// Log last 3 assistant/tool messages from the actual request body to verify model input is not disturbed
-			// Supports both Chat Completions API (messages) and Responses API (input)
-			const httpInput = request.messages ?? (request as any).input as any[] | undefined;
-			this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} transport=http totalItems=${httpInput?.length ?? 0}`);
-			if (httpInput) {
-				const tail = httpInput.filter((m: any) => m.role !== 'system' && m.role !== 'user' && m.role !== 'developer').slice(-3);
-				for (const item of tail) {
-					this._logService.info(`[REQUEST_TO_MODEL] requestId=${ourRequestId} item: ${JSON.stringify(item).substring(0, 2000)}`);
-				}
-			}
 			const httpResult = await this._doFetchViaHttp(
 				chatEndpointInfo,
 				request,
@@ -1111,7 +1092,7 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 		const requestStart = Date.now();
 		const handle = connection.sendRequest(request, { userInitiated: !!userInitiatedRequest, turnId }, cancellationToken);
 
-		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
+		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId, headerRequestId: ourRequestId });
 		const processor = this._instantiationService.createInstance(OpenAIResponsesProcessor, extendedBaseTelemetryData, modelRequestId.headerRequestId, modelRequestId.gitHubRequestId);
 
 		// Set up streaming first so event listeners are registered before we
@@ -1279,8 +1260,8 @@ export class ChatMLFetcherImpl extends AbstractChatMLFetcher {
 			};
 		}
 
-		// Extend baseTelemetryData with modelCallId for output messages
-		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId });
+		// Extend baseTelemetryData with modelCallId and headerRequestId for output messages
+		const extendedBaseTelemetryData = baseTelemetryData.extendedBy({ modelCallId, headerRequestId: ourRequestId });
 
 		let chatCompletions;
 		const gitHubRequestId = response.headers.get('x-github-request-id') ?? '';

@@ -627,6 +627,16 @@ class ChatWebSocketConnection extends Disposable implements IChatWebSocketConnec
 			totalSentCharacters: this._totalSentCharacters,
 			totalReceivedCharacters: this._totalReceivedCharacters,
 		});
+
+		// Log the raw request payload as it's sent to the model
+		const rawPayload = body.input ?? body.messages ?? [];
+		const payloadItems = Array.isArray(rawPayload) ? rawPayload : [];
+		const payloadTail = payloadItems.filter((m: Record<string, unknown>) => m.role !== 'system' && m.role !== 'user' && m.type !== 'system' && m.type !== 'user').slice(-3);
+		this._logService.info(`[REQUEST_TO_MODEL] requestId=${this.requestId} transport=websocket totalItems=${payloadItems.length} tailCount=${payloadTail.length}`);
+		for (const item of payloadTail) {
+			this._logService.info(`[REQUEST_TO_MODEL] requestId=${this.requestId} item: ${JSON.stringify(item).substring(0, 2000)}`);
+		}
+
 		this._ws.send(serializedMessage);
 
 		return request;
