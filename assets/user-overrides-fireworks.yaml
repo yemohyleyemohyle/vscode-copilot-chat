@@ -1,0 +1,23 @@
+modelSelector:
+  # MUST match what's specified in `customModels`.
+  vendor: customoai
+  id: accounts/msft/loadBalancers/glm-4p7
+
+installExtensions:
+  - id: github.copilot-chat
+    mode: vsix
+    path: /agent/assets/extensions/copilot-chat-0.37.0.vsix
+
+customModels:
+  customoai:
+    accounts/msft/loadBalancers/glm-4p7:
+      name: 'glm-4.7'
+      url: 'https://api.fireworks.ai/inference/v1/chat/completions'
+      toolCalling: true
+      vision: false
+      thinking: true
+      requiresAPIKey: true
+      maxInputTokens: 128000
+      maxOutputTokens: 16384
+        requestHeaders:
+       	  temperature: 0.6
